@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=64", "wheel", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "invest-calibration-assistant"
+version = "1.0.0"
+description = "TNC InVEST Automatic Calibration Assistant - InVEST Plugin (Option 1: CSV Inputs)"
+authors = [
+    {name = "Jonathan Nogales Pimentel - Miguel Angel Cañon", email = "jonathan.nogales@tnc.org"}
+]
+readme = "DEVELOPMENT.md"
+requires-python = ">=3.11"
+
+# Pip dependencies – installed when the plugin is installed with pip.
+# Only include packages available on PyPI.
+# NOTE: simpledbf is pip-only (not on conda-forge), so it goes here only.
+dependencies = [
+    "natcap.invest>=3.15.0",
+    "taskgraph",
+    "pygeoprocessing",
+    "spotpy>=1.6.2",
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "geopandas>=0.14.0",
+    "pyogrio>=0.7.0",
+    "rasterio>=1.3.0",
+    "rasterstats>=0.19.0",
+    "matplotlib>=3.7.0",
+    "openpyxl>=3.1.0",
+    "simpledbf>=0.2.6",
+]
+
+[tool.setuptools_scm]
+fallback_version = "1.0.0"
+
+[tool.natcap.invest]
+# Plugin API version - "v1" is the current and only version
+api_version = "v1"
+
+# Importable package name - MUST begin with "invest", no hyphens
+package_name = "invest_calibration_assistant"
+
+# Conda dependencies – installed via micromamba BEFORE pip.
+# IMPORTANT: Only packages available on conda-forge are allowed here.
+# Do NOT include pip-only packages (e.g. simpledbf) – they belong in
+# [project].dependencies above and will be installed by pip automatically.
+conda_dependencies = [
+    # --- Binary / C-extension packages that need conda-forge ---
+    "python>=3.11",
+    "gdal>=3.8,<3.11",
+    "geotiff>=1.7.3",
+    "pygeoprocessing",
+    "natcap.invest>=3.15.0",
+    "geopandas>=0.14.0",
+    "pyogrio>=0.7.0",
+    "rasterio>=1.3.0",
+    "pywin32>=311",
+    # NOTE: spotpy is intentionally NOT listed here.
+    # The conda-forge build of spotpy pulls in mpi4py → msmpi, which
+    # conflicts with a system-wide MSMPI installation and corrupts
+    # the plugin server's stdout protocol.
+    # spotpy is installed via pip (see [project].dependencies) instead,
+    # which does not include MPI support.
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
