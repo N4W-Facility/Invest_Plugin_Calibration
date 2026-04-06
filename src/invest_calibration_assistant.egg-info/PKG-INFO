@@ -1,0 +1,548 @@
+Metadata-Version: 2.4
+Name: invest-calibration-assistant
+Version: 1.0.0
+Summary: TNC InVEST Automatic Calibration Assistant - InVEST Plugin (Option 1: CSV Inputs)
+Author-email: Jonathan Nogales Pimentel - Miguel Angel Cañon <jonathan.nogales@tnc.org>
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: natcap.invest>=3.15.0
+Requires-Dist: taskgraph
+Requires-Dist: pygeoprocessing
+Requires-Dist: spotpy>=1.6.2
+Requires-Dist: pandas>=2.0.0
+Requires-Dist: numpy>=1.24.0
+Requires-Dist: geopandas>=0.14.0
+Requires-Dist: pyogrio>=0.7.0
+Requires-Dist: rasterio>=1.3.0
+Requires-Dist: rasterstats>=0.19.0
+Requires-Dist: matplotlib>=3.7.0
+Requires-Dist: openpyxl>=3.1.0
+Requires-Dist: simpledbf>=0.2.6
+
+# TNC InVEST Calibration Assistant – Plugin Development Guide
+
+**Author:** Jonathan Nogales Pimentel (jonathan.nogales@tnc.org)  
+**Organization:** Nature For Water Facility – The Nature Conservancy  
+**Version:** 1.0.0  
+**InVEST target:** ≥ 3.15.1  
+
+---
+
+## Overview
+
+This repository transforms the **InVEST Automatic Calibration Assistant** (`Spotpy_InVEST.py`) into a native **InVEST Workbench plugin**.
+
+### Option 1 – CSV Inputs (this plugin)
+
+The user provides **three CSV files** that mirror the three relevant sheets of the original Excel configuration file:
+
+| CSV input (plugin)                   | Excel sheet (original tool) |
+|--------------------------------------|-----------------------------|
+| Table Of Input File Names            | `UserData`                  |
+| Table Of Parameter Search Ranges     | `Params`                    |
+| Table Of Observed Data (watersheds)  | `Obs_Data`                  |
+
+---
+
+## Directory Structure
+
+El plugin es **completamente autónomo** – contiene todo lo necesario para instalarse y ejecutarse sin depender de carpetas externas.
+
+```
+invest_calibration_assistant/          ← THIS plugin (self-contained)
+├── pyproject.toml
+├── DEVELOPMENT.md  (this file)
+└── src/
+    └── invest_calibration_assistant/
+        ├── __init__.py
+        ├── calibration_assistant.py   ← MODEL_SPEC + execute() + validate()
+        ├── Spotpy_InVEST.py           ← core calibration engine (bundled)
+        └── InVEST_AutoCalTools.py     ← original GUI tool (bundled, reference)
+```
+
+> `Spotpy_InVEST.py` e `InVEST_AutoCalTools.py` son copias de los archivos originales,
+> incluidas dentro del paquete para que el plugin sea distribuible de forma independiente.
+
+---
+
+## CSV File Formats
+
+### CSV 1 – Table Of Input File Names
+
+Mirrors the `UserData` sheet. Two columns: `Parameter`, `Value`.  
+File names are **without extension** (`.tif`, `.shp`, `.csv` are added automatically).
+
+```csv
+Parameter,Value
+Pixel,30
+Name,MyProject
+BioTable,biophysical_table
+RainTable,rain_events_table
+LULC,lulc_2020
+DEM,dem
+R,erosivity_R
+K,erodibility_K
+SoilDepth,soil_depth
+ETP,etp_annual
+ETP_M,etp_monthly
+P,precip_annual
+P_M,precip_monthly
+PAWC,pawc
+HSG,soil_group
+Stream,stream
+Basin,watershed
+SubBasin,subwatershed
+Threshold_Flow,1000
+```
+
+**Row descriptions:**
+
+| Row           | Description                                                  |
+|---------------|--------------------------------------------------------------|
+| `Pixel`       | Raster pixel size in metres                                  |
+| `Name`        | Project name / results suffix label                          |
+| `BioTable`    | Biophysical table filename (inside `INPUTS/`)                |
+| `RainTable`   | Rain events table filename (SWY only, inside `INPUTS/`)      |
+| `LULC`        | Land-use / land-cover raster (inside `INPUTS/LULC/`)         |
+| `DEM`         | Digital elevation model raster                               |
+| `R`           | Rainfall erosivity raster (SDR / NDR)                        |
+| `K`           | Soil erodibility raster (SDR / NDR)                          |
+| `SoilDepth`   | Depth to root restricting layer raster (AWY / SWY)           |
+| `ETP`         | Annual evapotranspiration raster (AWY)                       |
+| `ETP_M`       | Monthly ETP folder name (SWY, inside `INPUTS/`)              |
+| `P`           | Annual precipitation raster                                  |
+| `P_M`         | Monthly precipitation folder name (SWY, inside `INPUTS/`)   |
+| `PAWC`        | Plant available water content raster (AWY / SWY)             |
+| `HSG`         | Hydrologic soil group raster (SDR / NDR / SWY)               |
+| `Stream`      | Stream raster (optional)                                     |
+| `Basin`       | Main watershed shapefile (inside `INPUTS/Basin/`)            |
+| `SubBasin`    | Sub-watershed shapefile (inside `INPUTS/Basin/`)             |
+| `Threshold_Flow` | Flow accumulation threshold for stream delineation        |
+
+---
+
+### CSV 2 – Table Of Parameter Search Ranges
+
+Mirrors the `Params` sheet. Four columns: `Parameter`, `Value`, `Min`, `Max`.
+
+```csv
+Parameter,Value,Min,Max
+Z,3.0,1.0,30.0
+Factor-Kc,1.0,0.5,1.5
+Factor-Kc_m,1.0,0.5,1.5
+Gamma,1.0,0.01,1.0
+Beta,1.0,0.01,1.0
+Alpha,1.0,0.01,1.0
+Factor-C,1.0,0.5,2.0
+Factor-P,1.0,0.5,2.0
+Borselli-IC0,0.5,0.1,2.0
+L_max,122.0,50.0,200.0
+sdr_max,0.8,0.1,0.999
+Factor_Load_N,1.0,0.1,5.0
+Factor_Eff_N,1.0,0.1,5.0
+SubCri_Len_N,150.0,50.0,500.0
+Sub_Eff_N,0.8,0.1,0.99
+Factor_Load_P,1.0,0.1,5.0
+Factor_Eff_P,1.0,0.1,5.0
+Borselli-K_SDR,2.0,0.5,10.0
+Borselli-K_NDR,2.0,0.5,10.0
+```
+
+**Parameter descriptions by model:**
+
+| Model  | Parameters used                                                         |
+|--------|-------------------------------------------------------------------------|
+| AWY    | `Z`, `Factor-Kc`                                                        |
+| SWY    | `Gamma`, `Beta`, `Alpha`, `Factor-Kc_m`                                 |
+| SDR    | `sdr_max`, `Borselli-K_SDR`, `Borselli-IC0`, `L_max`, `Factor-C`, `Factor-P` |
+| NDR_N  | `SubCri_Len_N`, `Sub_Eff_N`, `Borselli-K_NDR`, `Factor_Load_N`, `Factor_Eff_N` |
+| NDR_P  | `Borselli-K_NDR`, `Factor_Load_P`, `Factor_Eff_P`                      |
+
+---
+
+### CSV 3 – Table Of Observed Data For Each Watershed
+
+Mirrors the `Obs_Data` sheet. Each **column** represents one calibration
+watershed; each **row** is a time step (year or month).  
+Column names must match the watershed IDs used in your shapefile.
+
+```csv
+WS_01,WS_02,WS_03
+245.3,312.7,198.1
+231.0,298.4,204.5
+...
+```
+
+For streamflow (AWY/SWY) units are typically mm/year or mm/month.  
+For SDR, units are tonnes/year per watershed.  
+For NDR, units are kg/year per watershed.
+
+---
+
+## Instalación
+
+Existen dos métodos de instalación. Elige el que se adapte mejor a tu caso de uso.
+
+---
+
+### Método 1 – InVEST Workbench (recomendado para usuarios finales)
+
+Este es el método oficial descrito en la documentación de InVEST. La Workbench crea
+automáticamente un entorno **micromamba aislado** con todas las dependencias del plugin,
+sin interferir con tu entorno conda existente.
+
+#### Requisitos previos
+
+- InVEST Workbench instalado (versión ≥ 3.15.1)
+  - Descarga: https://naturalcapitalproject.stanford.edu/software/invest
+- Conexión a internet (la primera instalación descarga las dependencias de conda-forge)
+- El plugin debe estar en una ruta local accesible, por ejemplo:
+  ```
+  C:\CodeWLS\Invest_Tool\invest_calibration_assistant\
+  ```
+
+#### Pasos
+
+**Paso 1 – Abrir el gestor de plugins**
+
+1. Abre InVEST Workbench
+2. Haz clic en el ícono de menú **≡** (esquina superior derecha)
+3. Selecciona **"Manage Plugins"**
+
+   > Se abrirá la ventana de gestión de plugins. Si ya tienes plugins instalados,
+   > aparecerán listados aquí.
+
+**Paso 2 – Agregar el plugin desde una ruta local**
+
+1. En la ventana "Manage Plugins", busca el botón **"Add Plugin"** o similar
+2. Cuando se te pida la fuente del plugin, elige **"Local path"** (no URL de git)
+3. Navega hasta la carpeta del plugin y selecciónala:
+   ```
+   C:\CodeWLS\Invest_Tool\invest_calibration_assistant
+   ```
+   > La Workbench leerá el archivo `pyproject.toml` para obtener los metadatos
+   > del plugin, incluyendo su nombre, versión y dependencias.
+
+**Paso 3 – Esperar la instalación**
+
+La Workbench ejecuta automáticamente estos pasos en segundo plano:
+
+1. Lee `pyproject.toml` y extrae `conda_dependencies`
+2. Crea un entorno **micromamba** aislado (solo para este plugin)
+3. Instala las dependencias de conda-forge (GDAL, rasterio, spotpy, etc.)
+4. Instala el plugin vía `pip` en ese entorno
+5. Importa el plugin y lee el `MODEL_SPEC`
+6. Registra el plugin en la configuración de la Workbench
+
+   > ⏳ Este proceso puede tardar **5–15 minutos** la primera vez, dependiendo
+   > de la velocidad de internet, ya que descarga paquetes pesados como GDAL.
+   > Las reinstalaciones son mucho más rápidas.
+
+**Paso 4 – Verificar que el plugin aparece**
+
+Una vez completada la instalación:
+
+1. Cierra la ventana "Manage Plugins"
+2. En la lista de modelos de la Workbench, busca **"TNC InVEST Calibration Assistant"**
+3. Haz clic en él para abrir la interfaz del plugin
+
+   La ventana mostrará los campos definidos en `MODEL_SPEC`:
+   - Workspace, File Suffix
+   - Name Of The Model To Calibrate (dropdown: AWY, SWY, SDR, NDR_N, NDR_P)
+   - Table Of Input File Names (CSV)
+   - Table Of Parameter Search Ranges (CSV)
+   - Table Of Observed Data For Each Watershed (CSV)
+   - Evaluation Metric, Optimization Method
+   - Number Of Simulations
+
+#### Notas importantes sobre el Método 1
+
+> **Entorno aislado:** La Workbench ejecuta el plugin en su propio entorno micromamba,
+> completamente separado de tu entorno conda `InVEST_Tool`. Cualquier librería que
+> el plugin necesite **debe** estar declarada en `pyproject.toml` bajo
+> `dependencies` o `conda_dependencies`.
+
+> **Actualizar el plugin:** Si modificas el código del plugin (por ejemplo,
+> `calibration_assistant.py`), debes desinstalar y reinstalar el plugin desde
+> "Manage Plugins" para que los cambios surtan efecto. La Workbench no detecta
+> cambios automáticamente.
+
+> **Desinstalar:** En "Manage Plugins", selecciona el plugin y usa el botón
+> de eliminar/desinstalar. El entorno micromamba se borrará junto con el plugin.
+
+---
+
+### Método 2 – pip directo en entorno conda (recomendado para desarrollo)
+
+Este método instala el plugin directamente en tu entorno conda `InVEST_Tool`.
+Es ideal para desarrollo y pruebas rápidas porque los cambios en el código se
+reflejan inmediatamente (modo editable `-e`).
+
+#### Requisitos previos
+
+- Conda o Miniconda instalado
+- Entorno `InVEST_Tool` creado a partir de `Env_InVEST_Tool.yml`
+
+  Si aún no tienes el entorno, créalo así:
+  ```bash
+  conda env create -f C:\CodeWLS\Invest_Tool\InVEST_Automatic_Calibration_Assistant-main\Env_InVEST_Tool.yml
+  ```
+  > ⏳ Esto puede tardar 10–20 minutos la primera vez.
+
+#### Pasos
+
+**Paso 1 – Activar el entorno conda**
+
+Abre Anaconda Prompt (o cualquier terminal con conda disponible):
+
+```bash
+conda activate InVEST_Tool
+```
+
+Verifica que el entorno está activo:
+```bash
+# El prompt debe mostrar (InVEST_Tool) al inicio
+python --version
+# Resultado esperado: Python 3.13.x
+```
+
+**Paso 2 – Ir a la carpeta del plugin**
+
+```bash
+cd C:\CodeWLS\Invest_Tool\invest_calibration_assistant
+```
+
+Verifica que estás en el lugar correcto (debe existir `pyproject.toml`):
+```bash
+dir
+# Debes ver: pyproject.toml, DEVELOPMENT.md, src\
+```
+
+**Paso 3 – Instalar el plugin**
+
+Para **desarrollo** (modo editable – los cambios en el código son inmediatos):
+```bash
+pip install -e .
+```
+
+Para **producción** (instalación fija):
+```bash
+pip install .
+```
+
+Resultado esperado al instalar:
+```
+Successfully built invest-calibration-assistant
+Successfully installed invest-calibration-assistant-1.0.0
+```
+
+**Paso 4 – Verificar la instalación**
+
+```bash
+python -c "import invest_calibration_assistant; print(invest_calibration_assistant.MODEL_SPEC.model_title)"
+```
+
+Resultado esperado:
+```
+TNC InVEST Calibration Assistant
+```
+
+Si ves el título del modelo, la instalación fue exitosa.
+
+**Paso 5 – Verificar que InVEST lo reconoce**
+
+```bash
+python -c "import natcap.invest.models; print([m for m in natcap.invest.models if 'calibration' in m.lower()])"
+```
+
+Resultado esperado:
+```
+['invest_calibration_assistant']
+```
+
+**Paso 6 – Prueba de validación rápida (smoke test)**
+
+```python
+# Ejecutar en Python o guardar como test_plugin.py
+import invest_calibration_assistant as ica
+
+print("model_id    :", ica.MODEL_SPEC.model_id)
+print("model_title :", ica.MODEL_SPEC.model_title)
+print("n_inputs    :", len(ica.MODEL_SPEC.inputs))
+
+# Validar con argumentos incompletos (debe devolver lista de errores, no crash)
+warnings = ica.validate({
+    'workspace_dir':                  'C:/tmp/test_cal',
+    'model_name':                     'AWY',
+    'input_file_names_path':          'C:/tmp/input_files.csv',
+    'parameter_search_ranges_path':   'C:/tmp/params.csv',
+    'observed_data_path':             'C:/tmp/obs.csv',
+    'evaluation_metric':              'Root Mean Square Error (RMSE)',
+    'optimization_method':            'Latin Hypercube Sampling (LHS)',
+    'n_simulations':                  50,
+})
+print("\nValidation warnings (archivos no existen – esperado):")
+for keys, msg in warnings:
+    print(f"  {keys}: {msg}")
+```
+
+**Paso 7 – Prueba completa con datos reales**
+
+```python
+import invest_calibration_assistant as ica
+
+ica.execute({
+    'workspace_dir':                  'C:/Projects/MyProject/CALIBRATION',
+    'model_name':                     'AWY',
+    'input_file_names_path':          'C:/Projects/MyProject/input_files.csv',
+    'parameter_search_ranges_path':   'C:/Projects/MyProject/params.csv',
+    'observed_data_path':             'C:/Projects/MyProject/obs_data.csv',
+    'evaluation_metric':              'Root Mean Square Error (RMSE)',
+    'optimization_method':            'Latin Hypercube Sampling (LHS)',
+    'n_simulations':                  50,
+    'results_suffix':                 'run_01',
+    'n_workers':                      -1,
+})
+```
+
+#### Notas importantes sobre el Método 2
+
+> **Modo editable `-e`:** Con `pip install -e .`, cualquier cambio que hagas
+> en `calibration_assistant.py` o `Spotpy_InVEST.py` se aplica inmediatamente
+> la próxima vez que importes el módulo, sin necesidad de reinstalar.
+
+> **Mismo entorno que la Workbench:** Si la Workbench de InVEST está configurada
+> para usar el entorno `InVEST_Tool`, verá el plugin instalado con este método.
+> Si la Workbench usa su propio Python embebido (instalador .exe), este método
+> NO hará el plugin visible en la Workbench — usa el Método 1 en ese caso.
+
+> **Desinstalar:**
+> ```bash
+> pip uninstall invest-calibration-assistant
+> ```
+
+---
+
+## Comparación de métodos
+
+| Característica                     | Método 1 (Workbench)          | Método 2 (pip directo)         |
+|------------------------------------|-------------------------------|--------------------------------|
+| Entorno de ejecución               | Micromamba aislado (automático) | Entorno conda `InVEST_Tool`  |
+| Visible en InVEST Workbench        | ✅ Sí (siempre)               | ⚠️ Solo si Workbench usa el mismo entorno |
+| Cambios en código se aplican sin reinstalar | ❌ No              | ✅ Sí (con `-e`)               |
+| Requiere internet para instalar    | ✅ Sí (primera vez)           | ⚠️ Solo si faltan dependencias |
+| Ideal para                         | Usuarios finales              | Desarrolladores                |
+| Tiempo de instalación              | 5–15 min (1ª vez)             | < 1 min (entorno ya existe)    |
+
+---
+
+## Testing the Plugin
+
+### Prueba de importación rápida
+
+```bash
+conda activate InVEST_Tool
+python -c "
+import invest_calibration_assistant as ica
+print('OK – model_id:', ica.MODEL_SPEC.model_id)
+print('OK – inputs  :', [i.id for i in ica.MODEL_SPEC.inputs])
+"
+```
+
+### Prueba completa con datos de ejemplo
+
+1. Descomprime `Dummy_InVEST.zip` (incluido en la carpeta original de la herramienta)
+   en `C:\Projects\DummyProject\`
+
+2. Crea los tres archivos CSV siguiendo los formatos de la sección anterior
+
+3. Ejecuta la calibración:
+
+```python
+import invest_calibration_assistant as ica
+
+ica.execute({
+    'workspace_dir':                  'C:/Projects/DummyProject/CALIBRATION',
+    'model_name':                     'AWY',
+    'input_file_names_path':          'C:/Projects/DummyProject/input_files.csv',
+    'parameter_search_ranges_path':   'C:/Projects/DummyProject/params.csv',
+    'observed_data_path':             'C:/Projects/DummyProject/obs_data.csv',
+    'evaluation_metric':              'Root Mean Square Error (RMSE)',
+    'optimization_method':            'Latin Hypercube Sampling (LHS)',
+    'n_simulations':                  10,   # bajo para prueba rápida
+    'n_workers':                      -1,
+})
+```
+
+4. Verifica los resultados en:
+   - `C:\Projects\DummyProject\CALIBRATION\PARAMETERS\` → archivos CSV con parámetros
+   - `C:\Projects\DummyProject\CALIBRATION\FIGURES\` → gráficas de calibración
+   - `C:\Projects\DummyProject\CALIBRATION\OUTPUTS\` → resultados InVEST con mejores parámetros
+
+---
+
+## Project Input Folder Convention
+
+The `Spotpy_InVEST` core expects the project data laid out as follows
+(relative to the path entered in **Workspace**'s parent or a dedicated
+project root passed internally):
+
+```
+<ProjectRoot>/
+├── INPUTS/
+│   ├── LULC/
+│   │   └── <lulc_name>.tif
+│   ├── Basin/
+│   │   ├── <Basin>.shp  (+.dbf .prj .shx)
+│   │   └── <SubBasin>.shp
+│   ├── Basin_Cal_AWY/
+│   │   └── Basin_Cal_AWY.shp     ← calibration watershed for AWY
+│   ├── <BioTable>.csv
+│   ├── <RainTable>.csv            ← SWY only
+│   ├── <DEM>.tif
+│   ├── <ETP>.tif
+│   ├── <P>.tif
+│   ├── <PAWC>.tif
+│   ├── <SoilDepth>.tif
+│   ├── <HSG>.tif
+│   ├── <R>.tif                    ← SDR / NDR only
+│   ├── <K>.tif                    ← SDR / NDR only
+│   ├── <etp_monthly>/             ← SWY: folder with 12 monthly ETP rasters
+│   └── <precip_monthly>/          ← SWY: folder with 12 monthly P rasters
+│
+└── CALIBRATION/                   ← set this as plugin Workspace
+    ├── EVALUATIONS/               ← created automatically
+    ├── PARAMETERS/                ← created automatically
+    ├── OUTPUTS/                   ← created automatically
+    ├── FIGURES/                   ← created automatically
+    └── TMP/                       ← created automatically
+```
+
+---
+
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| `ModuleNotFoundError: No module named 'Spotpy_InVEST'` | El archivo `Spotpy_InVEST.py` debe estar en `src/invest_calibration_assistant/`. Verifica que el plugin se instaló correctamente con `pip install -e .` |
+| `ModuleNotFoundError: No module named 'spotpy'` | Activate the `InVEST_Tool` conda environment or run `pip install spotpy`. |
+| `ModuleNotFoundError: No module named 'win32com'` | Install pywin32: `conda install pywin32` (Windows only). |
+| CSV file not found | Use absolute paths. Forward slashes and backslashes both work on Windows. |
+| Plugin not visible in Workbench | Run `pip install -e .` inside the plugin folder with the Workbench Python environment active. |
+| Validation error: `n_simulations > 1` | Enter a value of 2 or more in the "Number Of Simulations" field. |
+
+---
+
+## Changelog
+
+| Date       | Version | Notes                                      |
+|------------|---------|--------------------------------------------|
+| 2025-04    | 1.0.0   | Initial plugin implementation (Option 1 CSV) |
+
+---
+
+## Next Steps
+
+- **Option 2:** Replace the 3 CSV files with individual field-by-field inputs
+  directly in the Workbench UI (one entry per InVEST parameter).  
+  This will require a larger `MODEL_SPEC` but eliminates the need for CSV templates.
