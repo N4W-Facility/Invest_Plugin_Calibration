@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "invest-calibration-assistant"
-version = "1.0.0"
-description = "TNC InVEST Automatic Calibration Assistant - InVEST Plugin (Option 1: CSV Inputs)"
+version = "0.2.1"
+description = "TNC InVEST Automatic Calibration Assistant - InVEST Plugin (per-model individual inputs)"
 authors = [
     {name = "Jonathan Nogales Pimentel - Miguel Angel Cañon", email = "jonathan.nogales@tnc.org"}
 ]
@@ -32,7 +32,7 @@ dependencies = [
 ]
 
 [tool.setuptools_scm]
-fallback_version = "1.0.0"
+fallback_version = "0.1.0"
 
 [tool.natcap.invest]
 # Plugin API version - "v1" is the current and only version
@@ -48,7 +48,7 @@ package_name = "invest_calibration_assistant"
 conda_dependencies = [
     # --- Binary / C-extension packages that need conda-forge ---
     "python>=3.11",
-    "gdal>=3.8,<3.11",
+    "gdal>=3.11",
     "geotiff>=1.7.3",
     "pygeoprocessing",
     "natcap.invest>=3.15.0",
