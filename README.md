@@ -108,9 +108,6 @@ This is the standard way to install the plugin for end users.
 
 1. Open the **InVEST Workbench**.
 2. In the left sidebar, click **Manage Plugins**.
-
-   ![Manage Plugins](docs/img/workbench_manage_plugins.png)
-
 3. Click **Add Plugin**.
 4. In the source field, paste the URL of this GitHub repository:
    ```
