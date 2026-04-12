@@ -325,8 +325,12 @@ MODEL_SPEC = spec.ModelSpec(
             id='eto_monthly_dir',
             name=gettext('Monthly ETP Folder'),
             about=gettext(
-                'Folder containing 12 monthly reference evapotranspiration '
-                'rasters named with month numbers (e.g. eto_1.tif … eto_12.tif). '
+                'Folder containing exactly 12 monthly reference '
+                'evapotranspiration rasters (.tif). Each filename must end '
+                'with the month number, e.g. ETo_1.tif, ETo_2.tif ... '
+                'ETo_12.tif (zero-padding is also accepted: ETo_01.tif). '
+                'The plugin detects the month from the trailing number in '
+                'the filename — do NOT use names like "January.tif". '
                 'Required for SWY only.'),
             contents=[],
             must_exist=True,
@@ -338,9 +342,12 @@ MODEL_SPEC = spec.ModelSpec(
             id='precip_monthly_dir',
             name=gettext('Monthly Precipitation Folder'),
             about=gettext(
-                'Folder containing 12 monthly precipitation rasters '
-                'named with month numbers (e.g. precip_1.tif … precip_12.tif). '
-                'Required for SWY only.'),
+                'Folder containing exactly 12 monthly precipitation rasters '
+                '(.tif). Each filename must end with the month number, e.g. '
+                'P_1.tif, P_2.tif ... P_12.tif (zero-padding is also '
+                'accepted: P_01.tif). The plugin detects the month from the '
+                'trailing number in the filename — do NOT use names like '
+                '"January.tif". Required for SWY only.'),
             contents=[],
             must_exist=True,
             permissions='r',
@@ -714,6 +721,51 @@ def _save_eval_csv(workspace, name, header, rows):
             f.write(row + '\n')
 
 
+def _build_monthly_raster_table(raster_dir, tmp_dir, label):
+    """Build a month→path CSV table required by InVEST SWY ≥ 3.18.
+
+    Scans *raster_dir* for .tif/.tiff files and maps each file to its month
+    number by extracting the trailing integer from the filename stem (e.g.
+    ``ETo_1.tif`` → 1, ``P_12.tif`` → 12, ``precip_01.tif`` → 1).
+
+    Supports both zero-padded (``P_01.tif``) and non-padded (``P_1.tif``)
+    naming conventions.  Exactly 12 files covering months 1–12 must be
+    present.
+
+    Writes the resulting CSV to *tmp_dir*/<label>_raster_table.csv and
+    returns that path.
+    """
+    import re  # noqa: PLC0415
+
+    tifs = [
+        f for f in os.listdir(raster_dir)
+        if f.lower().endswith('.tif') or f.lower().endswith('.tiff')
+    ]
+
+    # Extract trailing integer from each filename stem (before extension)
+    month_map = {}
+    for fname in tifs:
+        stem = os.path.splitext(fname)[0]
+        m = re.search(r'(\d+)$', stem)
+        if m:
+            month_num = int(m.group(1))
+            month_map[month_num] = fname
+
+    missing = set(range(1, 13)) - set(month_map.keys())
+    if missing:
+        raise ValueError(
+            f'Could not find rasters for months {sorted(missing)} in '
+            f'{raster_dir}. Files found: {sorted(tifs)}'
+        )
+
+    csv_path = os.path.join(tmp_dir, f'{label}_raster_table.csv')
+    with open(csv_path, 'w') as f:
+        f.write('month,path\n')
+        for month in range(1, 13):
+            f.write(f'{month},{os.path.join(raster_dir, month_map[month])}\n')
+    return csv_path
+
+
 def _execute_awy_direct(workspace, mp, user_data, vector, metric_name, factor_metric, obs_df, si):
     """One AWY calibration iteration using direct file paths."""
     import natcap.invest.annual_water_yield as _awy  # noqa: PLC0415
@@ -781,18 +833,25 @@ def _execute_swy_direct(workspace, mp, user_data, vector, metric_name, factor_me
 
     out_dir  = os.path.join(workspace, 'OUTPUTS', '02-SWY')
     suffix   = user_data['Suffix']
+    tmp_dir  = os.path.join(workspace, 'TMP')
+
+    # SWY ≥ 3.18 replaced et0_dir/precip_dir with CSV raster tables
+    et0_table   = _build_monthly_raster_table(mp['eto_monthly_dir'],   tmp_dir, 'et0')
+    precip_table = _build_monthly_raster_table(mp['precip_monthly_dir'], tmp_dir, 'precip')
+
     swy_args = {
         'lulc_raster_path':              mp['lulc_path'],
         'biophysical_table_path':        tmp_bio,
         'depth_to_root_rest_layer_path': mp['depth_to_root_rest_layer_path'],
-        'et0_dir':                       mp['eto_monthly_dir'],
-        'precip_dir':                    mp['precip_monthly_dir'],
+        'et0_raster_table':              et0_table,
+        'precip_raster_table':           precip_table,
         'rain_events_table_path':        mp['rain_events_table_path'],
         'soil_group_path':               mp['soil_group_path'],
         'pawc_raster_path':              mp['pawc_path'],
         'dem_raster_path':               mp['dem_path'],
-        'watersheds_path':               mp['calibration_watersheds_path'],
+        'aoi_path':                      mp['calibration_watersheds_path'],
         'threshold_flow_accumulation':   '%0.0f' % mp['threshold_flow_accumulation'],
+        'flow_dir_algorithm':            'D8',
         'alpha_m':                       '%.3f' % alpha,
         'beta_i':                        '%.3f' % beta,
         'gamma':                         '%.3f' % gamma,
@@ -1015,17 +1074,21 @@ def _run_best_params(workspace, model_name, mp, user_data, params_val, si):
         _awy.execute(invest_args)
 
     elif model_name == 'SWY':
+        tmp_dir  = os.path.join(workspace, 'TMP')
+        et0_table    = _build_monthly_raster_table(mp['eto_monthly_dir'],   tmp_dir, 'et0_best')
+        precip_table = _build_monthly_raster_table(mp['precip_monthly_dir'], tmp_dir, 'precip_best')
         invest_args = {
             'lulc_raster_path':              mp['lulc_path'],
             'biophysical_table_path':        tmp_bio,
             'depth_to_root_rest_layer_path': mp['depth_to_root_rest_layer_path'],
-            'et0_dir':                       mp['eto_monthly_dir'],
-            'precip_dir':                    mp['precip_monthly_dir'],
+            'et0_raster_table':              et0_table,
+            'precip_raster_table':           precip_table,
             'rain_events_table_path':        mp['rain_events_table_path'],
             'soil_group_path':               mp['soil_group_path'],
             'pawc_raster_path':              mp['pawc_path'],
             'dem_raster_path':               mp['dem_path'],
-            'watersheds_path':               mp['watersheds_path'],
+            'aoi_path':                      mp['watersheds_path'],  # SWY uses aoi_path
+            'flow_dir_algorithm':            'D8',
             'threshold_flow_accumulation':   tfa,
             'alpha_m':                       '%.3f' % params_val.get('Alpha', 1.0),
             'beta_i':                        '%.3f' % params_val.get('Beta', 1.0),

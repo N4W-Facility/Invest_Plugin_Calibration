@@ -167,6 +167,7 @@ See [CALIBRATION_PROCESS.md](../CALIBRATION_PROCESS.md) for a detailed explanati
 | 0.1.1 | 2025-04 | AWY: individual field inputs; other models keep legacy CSV |
 | 0.2.0 | 2025-04 | All models: individual field inputs; legacy CSV removed |
 | 0.2.1 | 2026-04 | Spotpy interface fix; `execute()` returns file registry dict |
+| 0.2.2 | 2026-04 | SWY fixes for InVEST 3.18: `aoi_path`, raster tables, `flow_dir_algorithm` |
 
 ---
 
