@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-TNC InVEST Calibration Assistant - InVEST Plugin
+InVEST Calibration Assistant - InVEST Plugin
 
 Nature For Water Facility - The Nature Conservancy
 Author  : Jonathan Nogales Pimentel / Miguel Angel Cañon
@@ -61,7 +61,7 @@ _NDR            = 'model_name in ["NDR_N", "NDR_P"]'
 # ---------------------------------------------------------------------------
 MODEL_SPEC = spec.ModelSpec(
     model_id="invest_calibration_assistant",
-    model_title=gettext("TNC InVEST Calibration Assistant"),
+    model_title=gettext("InVEST Calibration Assistant"),
     module_name=__name__,
     userguide='',
     input_field_order=[
@@ -908,7 +908,7 @@ def _execute_sdr_direct(workspace, mp, user_data, vector, metric_name, factor_me
     out_dir  = os.path.join(workspace, 'OUTPUTS', '03-SDR')
     suffix   = user_data['Suffix']
     sdr_args = {
-        'lulc_raster_path':           mp['lulc_path'],
+        'lulc_path':                  mp['lulc_path'],
         'biophysical_table_path':     tmp_bio,
         'dem_path':                   mp['dem_path'],
         'erosivity_path':             mp['erosivity_path'],
@@ -976,6 +976,10 @@ def _execute_ndr_direct(workspace, mp, user_data, vector, metric_name, factor_me
                      'subsurface_eff_p':             '%.2f' % eff_p}
 
     table = si.Factor_BioTable(mp['biophysical_table_path'], params, user_data)
+    if model_name == 'NDR_N' and 'load_type_n' not in table.columns:
+        table['load_type_n'] = 'measured-runoff'
+    if model_name == 'NDR_P' and 'load_type_p' not in table.columns:
+        table['load_type_p'] = 'measured-runoff'
     tmp_bio = os.path.join(workspace, 'TMP', f'{model_name}_biophysical.csv')
     table.to_csv(tmp_bio, index=False)
 
@@ -983,7 +987,7 @@ def _execute_ndr_direct(workspace, mp, user_data, vector, metric_name, factor_me
                            '04-NDR_N' if model_name == 'NDR_N' else '04-NDR_P')
     suffix  = user_data['Suffix']
     ndr_args = {
-        'lulc_raster_path':           mp['lulc_path'],
+        'lulc_path':                  mp['lulc_path'],
         'biophysical_table_path':     tmp_bio,
         'dem_path':                   mp['dem_path'],
         'runoff_proxy_path':          mp['precipitation_path'],
@@ -1047,6 +1051,10 @@ def _run_best_params(workspace, model_name, mp, user_data, params_val, si):
     from natcap.invest.ndr import ndr as _ndr             # noqa: PLC0415
 
     table = si.Factor_BioTable(mp['biophysical_table_path'], params_val, user_data)
+    if model_name == 'NDR_N' and 'load_type_n' not in table.columns:
+        table['load_type_n'] = 'measured-runoff'
+    if model_name == 'NDR_P' and 'load_type_p' not in table.columns:
+        table['load_type_p'] = 'measured-runoff'
     tmp_bio = os.path.join(workspace, 'TMP', f'{model_name}_BioTable_best.csv')
     table.to_csv(tmp_bio, index=False)
 
@@ -1105,7 +1113,7 @@ def _run_best_params(workspace, model_name, mp, user_data, params_val, si):
 
     elif model_name == 'SDR':
         invest_args = {
-            'lulc_raster_path':           mp['lulc_path'],
+            'lulc_path':                  mp['lulc_path'],
             'biophysical_table_path':     tmp_bio,
             'dem_path':                   mp['dem_path'],
             'erosivity_path':             mp['erosivity_path'],
@@ -1125,7 +1133,7 @@ def _run_best_params(workspace, model_name, mp, user_data, params_val, si):
     elif model_name in ('NDR_N', 'NDR_P'):
         is_n = (model_name == 'NDR_N')
         invest_args = {
-            'lulc_raster_path':           mp['lulc_path'],
+            'lulc_path':                  mp['lulc_path'],
             'biophysical_table_path':     tmp_bio,
             'dem_path':                   mp['dem_path'],
             'runoff_proxy_path':          mp['precipitation_path'],
@@ -1166,7 +1174,7 @@ def execute(args):
         the Workbench enforces this through the required/allowed expressions.
     """
     LOGGER.info('=' * 60)
-    LOGGER.info('TNC InVEST Calibration Assistant')
+    LOGGER.info('InVEST Calibration Assistant')
     LOGGER.info('=' * 60)
 
     workspace  = args['workspace_dir']

@@ -1,7 +1,6 @@
-=======
-# TNC InVEST Calibration Assistant
+# InVEST Calibration Assistant
 
-> **InVEST Workbench Plugin — v0.2.1 (pre-release)**  
+> **InVEST Workbench Plugin — v0.2.4 (pre-release)**  
 > Nature For Water Facility · The Nature Conservancy  
 > Authors: Jonathan Nogales Pimentel · Miguel Angel Cañon  
 > Contact: jonathan.nogales@tnc.org
@@ -10,7 +9,7 @@
 
 ## What it does
 
-The **TNC InVEST Calibration Assistant** is a plugin for the [InVEST Workbench](https://naturalcapitalproject.stanford.edu/software/invest) that automates the calibration of InVEST hydrological models.
+The **InVEST Calibration Assistant** is a plugin for the [InVEST Workbench](https://naturalcapitalproject.stanford.edu/software/invest) that automates the calibration of InVEST hydrological models.
 
 Given a set of observed field measurements (streamflow, sediment, nutrients) and a search range for each model parameter, the plugin iteratively runs the selected InVEST model, evaluates how well each parameter combination reproduces the observations, and finds the best-fitting set of parameters — all from within the Workbench UI.
 
@@ -165,6 +164,8 @@ See [CALIBRATION_PROCESS.md](../CALIBRATION_PROCESS.md) for a detailed explanati
 | 0.2.0 | 2025-04 | All models: individual field inputs; legacy CSV removed |
 | 0.2.1 | 2026-04 | Spotpy interface fix; `execute()` returns file registry dict |
 | 0.2.2 | 2026-04 | SWY fixes for InVEST 3.18: `aoi_path`, raster tables, `flow_dir_algorithm` |
+| 0.2.3 | 2026-04 | SDR/NDR fix: `lulc_raster_path` → `lulc_path` in calibration loop and best-run |
+| 0.2.4 | 2026-04 | NDR fix for InVEST 3.18: auto-inject `load_type_n`/`load_type_p = measured-runoff`; pandas Copy-on-Write fix in `Factor_BioTable` |
 
 ---
 
@@ -172,4 +173,3 @@ See [CALIBRATION_PROCESS.md](../CALIBRATION_PROCESS.md) for a detailed explanati
 
 This program is free software distributed under the **GNU General Public License v3**.  
 See [http://www.gnu.org/licenses/](http://www.gnu.org/licenses/) for details.
-

@@ -263,7 +263,7 @@ def Factor_BioTable(PathBioTable, Params, UserData):
         # Si el factor hace que el Kc sea mayor que 1.2, limita el valor a 1.2
         Values[Values >= 1.2] = 1.2
         # Asigna los valores de Kc modificados a la tabla
-        Table['Kc'].loc[Table['Status_Cal_Kc'] == 1] = Values.loc[Table['Status_Cal_Kc'] == 1]
+        Table.loc[Table['Status_Cal_Kc'] == 1, 'Kc'] = Values.loc[Table['Status_Cal_Kc'] == 1]
 
     # Seasonal Water Yield
     if UserData['Status_SWY']:
@@ -276,7 +276,7 @@ def Factor_BioTable(PathBioTable, Params, UserData):
             # Si el factor hace que el Kc sea mayor que 1.2, limita el valor a 1.2
             Values[Values >= 1.2] = 1.2
             # Asigna los valores de Kc modificados a la tabla
-            Table['Kc_' + str(ij)].loc[Table['Status_Cal_Kc'] == 1] = Values.loc[Table['Status_Cal_Kc'] == 1]
+            Table.loc[Table['Status_Cal_Kc'] == 1, 'Kc_' + str(ij)] = Values.loc[Table['Status_Cal_Kc'] == 1]
 
     # Sediment Delivery Ratio
     if UserData['Status_SDR'] == 1:
@@ -288,57 +288,29 @@ def Factor_BioTable(PathBioTable, Params, UserData):
         # Si el factor hace que el C sea mayor que 1, limita el valor a 1
         Values[Values > 1] = 1
         # Asigna los valores de C modificados a la tabla
-        Table['usle_c'].loc[Table['Status_Cal_C'] == 1] = Values.loc[Table['Status_Cal_C'] == 1]
+        Table.loc[Table['Status_Cal_C'] == 1, 'usle_c'] = Values.loc[Table['Status_Cal_C'] == 1]
 
         # Aplica el factor multiplicador a los valores del factor P y redondea a 2 decimales
         Values = round(Table['usle_p'] * round(Params['Factor-P'], 2), 2)
         # Si el factor hace que el P sea mayor que 1, limita el valor a 1
         Values[Values > 1] = 1
         # Asigna los valores de C modificados a la tabla
-        Table['usle_p'].loc[Table['Status_Cal_P'] == 1] = Values.loc[Table['Status_Cal_P'] == 1]
+        Table.loc[Table['Status_Cal_P'] == 1, 'usle_p'] = Values.loc[Table['Status_Cal_P'] == 1]
 
     # Nutrient Delivery Ratio
     if (UserData['Status_NDR_N'] == 1):
-        # --------------------------------------------------------------------------------------------------------------
-        #  Afectacion de parametros de carga de niotrogeno en la tabla biofisica
-        # --------------------------------------------------------------------------------------------------------------
-        # Aplica el factor multiplicador a los valores de carga y redondea a 3 decimales
         Values = round(Table['load_n'] * Params['Factor_Load_N'], 3)
-        # Asigna los valores de load_n modificados a la tabla
-        Table['load_n'].loc[Table['Status_Cal_Load_N'] == 1] = Values.loc[Table['Status_Cal_Load_N'] == 1]
-        # Asigna los valores de carga modificados a la tabla
-        Table['load_n'] = Values
+        Table.loc[Table['Status_Cal_Load_N'] == 1, 'load_n'] = Values.loc[Table['Status_Cal_Load_N'] == 1]
 
-        # --------------------------------------------------------------------------------------------------------------
-        # Afectacion de parametros de eficiencia de retencion de nitrogeno en la tabla biofisica
-        # --------------------------------------------------------------------------------------------------------------
-        # Aplica el factor multiplicador a los valores de eficiencia y redondea a 2 decimales
         Values = round(Table['eff_n'] * Params['Factor_Eff_N'], 2)
-        # Asigna los valores de eff_n modificados a la tabla
-        Table['eff_n'].loc[Table['Status_Cal_Eff_N'] == 1] = Values.loc[Table['Status_Cal_Eff_N'] == 1]
-        # Asigna los valores de carga modificados a la tabla
-        Table['eff_n'] = Values
+        Table.loc[Table['Status_Cal_Eff_N'] == 1, 'eff_n'] = Values.loc[Table['Status_Cal_Eff_N'] == 1]
 
     if (UserData['Status_NDR_P'] == 1):
-        # --------------------------------------------------------------------------------------------------------------
-        #  Afectacion de parametros de carga de niotrogeno en la tabla biofisica
-        # --------------------------------------------------------------------------------------------------------------
-        # Aplica el factor multiplicador a los valores de carga y redondea a 3 decimales
         Values = round(Table['load_p'] * Params['Factor_Load_P'], 3)
-        # Asigna los valores de load_n modificados a la tabla
-        Table['load_p'].loc[Table['Status_Cal_Load_P'] == 1] = Values.loc[Table['Status_Cal_Load_P'] == 1]
-        # Asigna los valores de carga modificados a la tabla
-        Table['load_p'] = Values
+        Table.loc[Table['Status_Cal_Load_P'] == 1, 'load_p'] = Values.loc[Table['Status_Cal_Load_P'] == 1]
 
-        # --------------------------------------------------------------------------------------------------------------
-        # Afectacion de parametros de eficiencia de retencion de nitrogeno en la tabla biofisica
-        # --------------------------------------------------------------------------------------------------------------
-        # Aplica el factor multiplicador a los valores de eficiencia y redondea a 2 decimales
         Values = round(Table['eff_p'] * Params['Factor_Eff_P'], 2)
-        # Asigna los valores de eff_n modificados a la tabla
-        Table['eff_p'].loc[Table['Status_Cal_Eff_P'] == 1] = Values.loc[Table['Status_Cal_Eff_P'] == 1]
-        # Asigna los valores de carga modificados a la tabla
-        Table['eff_p'] = Values
+        Table.loc[Table['Status_Cal_Eff_P'] == 1, 'eff_p'] = Values.loc[Table['Status_Cal_Eff_P'] == 1]
 
     # Carbons
     # if UserData['Status_CO2'] == 1:
