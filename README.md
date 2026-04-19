@@ -2,7 +2,7 @@
 
 > **InVEST Workbench Plugin — v0.2.4 (pre-release)**  
 > Nature For Water Facility · The Nature Conservancy  
-> Authors: Jonathan Nogales Pimentel · Miguel Angel Cañon  
+> Authors: Jonathan Nogales Pimentel · Carlos A. Rogéliz Prada · Miguel Angel Cañon 
 > Contact: jonathan.nogales@tnc.org · miguel.canon@tnc.org
 
 ---
