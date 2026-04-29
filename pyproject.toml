@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "invest-calibration-assistant"
-version = "0.2.4"
+version = "1.0.0"
 description = "InVEST Calibration Assistant - InVEST Plugin (per-model individual inputs)"
 authors = [
     {name = "Jonathan Nogales Pimentel - Miguel Angel Cañon", email = "jonathan.nogales@tnc.org"}

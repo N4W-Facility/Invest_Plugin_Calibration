@@ -1,9 +1,9 @@
 # InVEST Calibration Assistant
 
-> **InVEST Workbench Plugin — v0.2.4 (pre-release)**  
+> **InVEST Workbench Plugin — v1.0.0**  
 > Nature For Water Facility · The Nature Conservancy  
 > Authors: Jonathan Nogales Pimentel · Carlos A. Rogéliz Prada · Miguel Angel Cañon 
-> Contact: jonathan.nogales@tnc.org · miguel.canon@tnc.org · carlos.rogeliz@tnc.org
+> Contact: jonathan.nogales@tnc.org · carlos.rogeliz@tnc.org · miguel.canon@tnc.org  
 
 ---
 
@@ -73,6 +73,12 @@ ws_id,AWY,SWY,SDR,NDR_N,NDR_P
 | `NDR_N` | kg/year | Observed nitrogen load |
 | `NDR_P` | kg/year | Observed phosphorus load |
 
+### Dummy dataset
+
+A complete set of sample input files (rasters, shapefiles, biophysical table, Parameters.csv, and Obs_Data.csv) is available for testing all five models:
+
+> **[Download dummy dataset](https://tnc.box.com/s/m3gtuoj1hw5ijf95fxh7t0saii10ksln)**
+
 ---
 
 ## Output structure
@@ -106,11 +112,11 @@ workspace_dir/
 This is the standard way to install the plugin for end users.
 
 1. Open the **InVEST Workbench**.
-2. In the left sidebar, click **Manage Plugins**.
+2. In the right sidebar, click **Manage Plugins**.
 3. Click **Add Plugin**.
 4. In the source field, paste the URL of this GitHub repository:
    ```
-   https://github.com/<org>/invest_calibration_assistant
+   https://github.com/N4W-Facility/Invest_Plugin_Calibration.git
    ```
 5. Click **Install**. The Workbench will automatically:
    - Create an isolated conda environment
@@ -121,22 +127,6 @@ This is the standard way to install the plugin for end users.
 
 > **Note:** Installation requires an internet connection the first time. Subsequent runs
 > use the cached environment and are much faster to start.
-
----
-
-### Via pip (development / advanced)
-
-For developers who want to modify the plugin source:
-
-```bash
-git clone https://github.com/<org>/invest_calibration_assistant.git
-cd invest_calibration_assistant
-pip install -e .
-```
-
-> **Note:** Do not install `spotpy` from conda-forge. The conda-forge build includes
-> MPI support (`mpi4py` → `msmpi`) which conflicts with the Workbench plugin server.
-> The `pip` version (used automatically by both methods above) does not include MPI.
 
 ---
 
@@ -151,7 +141,7 @@ pip install -e .
 
 ## How calibration works
 
-See [CALIBRATION_PROCESS.md](../CALIBRATION_PROCESS.md) for a detailed explanation of the calibration loop, how Spotpy interacts with InVEST, how to interpret dotty plots, and a glossary of terms.
+See [CALIBRATION_PROCESS.md](CALIBRATION_PROCESS.md) for a detailed explanation of the calibration loop, how Spotpy interacts with InVEST, how to interpret dotty plots, and a glossary of terms.
 
 ---
 
@@ -166,6 +156,7 @@ See [CALIBRATION_PROCESS.md](../CALIBRATION_PROCESS.md) for a detailed explanati
 | 0.2.2 | 2026-04 | SWY fixes for InVEST 3.18: `aoi_path`, raster tables, `flow_dir_algorithm` |
 | 0.2.3 | 2026-04 | SDR/NDR fix: `lulc_raster_path` → `lulc_path` in calibration loop and best-run |
 | 0.2.4 | 2026-04 | NDR fix for InVEST 3.18: auto-inject `load_type_n`/`load_type_p = measured-runoff`; pandas Copy-on-Write fix in `Factor_BioTable` |
+| 1.0.0 | 2026-04 | First stable release: all 5 models validated (AWY, SWY, SDR, NDR_N, NDR_P) |
 
 ---
 
