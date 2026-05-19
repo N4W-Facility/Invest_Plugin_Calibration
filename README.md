@@ -135,7 +135,7 @@ This is the standard way to install the plugin for end users.
 - InVEST Workbench ≥ 3.15.1
 - Python ≥ 3.11
 - GDAL ≥ 3.11 (installed automatically via conda-forge)
-- Windows (required for `pywin32`; the `Spotpy_InVEST.py` engine uses win32 COM)
+- Windows or macOS (cross-platform)
 
 ---
 

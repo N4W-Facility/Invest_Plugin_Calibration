@@ -55,7 +55,9 @@ conda_dependencies = [
     "geopandas>=0.14.0",
     "pyogrio>=0.7.0",
     "rasterio>=1.3.0",
-    "pywin32>=311",
+    # pywin32 is optional: only required by legacy Excel-based Plot functions in Spotpy_InVEST.py,
+    # which are not called by the plugin. Remove this line to enable Mac/Linux support.
+    # "pywin32>=311",
     # NOTE: spotpy is intentionally NOT listed here.
     # The conda-forge build of spotpy pulls in mpi4py → msmpi, which
     # conflicts with a system-wide MSMPI installation and corrupts
