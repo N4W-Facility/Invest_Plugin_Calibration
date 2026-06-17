@@ -162,5 +162,4 @@ See [CALIBRATION_PROCESS.md](CALIBRATION_PROCESS.md) for a detailed explanation 
 
 ## License
 
-This program is free software distributed under the **GNU General Public License v3**.  
-See [http://www.gnu.org/licenses/](http://www.gnu.org/licenses/) for details.
+This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for details.

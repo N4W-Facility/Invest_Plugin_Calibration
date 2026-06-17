@@ -508,9 +508,12 @@ MODEL_SPEC = spec.ModelSpec(
             id='n_simulations',
             name=gettext('Number Of Simulations'),
             about=gettext(
-                'Total model evaluations during calibration. Must be > 1. '
-                'Larger values improve parameter estimation at the cost of time.'),
-            expression='value > 1',
+                'Total model evaluations during calibration. Must be >= 10. '
+                'The DDS algorithm requires at least 10 iterations for its '
+                'initialization phase. '
+                'Larger values improve parameter estimation at the cost of '
+                'computation time.'),
+            expression='value >= 10',
         ),
     ],
 
@@ -1271,10 +1274,12 @@ def validate(args, limit_to=None):
     if limit_to is None or limit_to == 'n_simulations':
         try:
             n = int(args.get('n_simulations', 0))
-            if n <= 1:
+            if n < 10:
                 warnings.append(
                     (['n_simulations'],
-                     'Number of simulations must be an integer greater than 1.'))
+                     'Number of simulations must be at least 10. '
+                     'The DDS optimization algorithm requires a minimum of '
+                     '10 iterations for its initialization phase.'))
         except (ValueError, TypeError):
             warnings.append(
                 (['n_simulations'],

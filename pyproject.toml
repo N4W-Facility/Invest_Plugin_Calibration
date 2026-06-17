@@ -5,12 +5,16 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "invest-calibration-assistant"
 version = "1.0.0"
-description = "InVEST Calibration Assistant - InVEST Plugin (per-model individual inputs)"
+description = "Automated calibration of InVEST hydrological models (AWY, SWY, SDR, NDR). Given observed field measurements and parameter search ranges, the plugin iteratively runs the selected model, evaluates goodness-of-fit, and finds the best-fitting parameters — all from within the InVEST Workbench UI."
 authors = [
-    {name = "Jonathan Nogales Pimentel - Miguel Angel Cañon", email = "jonathan.nogales@tnc.org"}
+    {name = "Jonathan Nogales Pimentel", email = "jonathan.nogales@tnc.org"},
+    {name = "Carlos A. Rogéliz Prada", email = "carlos.rogeliz@tnc.org"},
+    {name = "Miguel Angel Cañon", email = "miguel.canon@tnc.org"},
 ]
-readme = "DEVELOPMENT.md"
+readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
 
 # Pip dependencies – installed when the plugin is installed with pip.
 # Only include packages available on PyPI.
@@ -30,6 +34,11 @@ dependencies = [
     "openpyxl>=3.1.0",
     "simpledbf>=0.2.6",
 ]
+
+[project.urls]
+Repository = "https://github.com/N4W-Facility/Invest_Plugin_Calibration"
+Issues = "https://github.com/N4W-Facility/Invest_Plugin_Calibration/issues"
+Documentation = "https://github.com/N4W-Facility/Invest_Plugin_Calibration/blob/main/README.md"
 
 [tool.setuptools_scm]
 fallback_version = "0.1.0"
