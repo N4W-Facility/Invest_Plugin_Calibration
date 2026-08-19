@@ -1380,8 +1380,13 @@ def Plot_AWY(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
     Sim         = Sim.transpose() / (3600 * 24 * 365)
 
     # Best Parameters
-    id_min      = np.argmin(Metric)
-    BestParams  = Params[id_min, :]
+    # Metric ya viene con FactorMetric aplicado (FactorMetric*RMSE), por lo que
+    # volver a multiplicar por FactorMetric antes de comparar recupera el RMSE
+    # real, sin importar si el algoritmo internamente maximiza (DDS) o minimiza
+    # (SCE-UA/LHS).
+    id_min          = np.argmin(FactorMetric * Metric)
+    BestParams      = Params[id_min, :]
+    BestParamsDict  = dict(zip(['Z', 'Factor-Kc'], BestParams))
     BestAREM    = FactorMetric*Metric[id_min]
     Metric      = FactorMetric*Metric
 
@@ -1419,6 +1424,8 @@ def Plot_AWY(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
     plt.savefig(FileName)
     plt.close()
 
+    return BestParamsDict
+
 def Plot_SWY(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
 
     # Metric and parameters
@@ -1443,8 +1450,13 @@ def Plot_SWY(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
     Sim         = Sim.transpose()
 
     # Best Parameters
-    id_min      = np.argmin(Metric)
-    BestParams  = Params[id_min, :]
+    # Metric ya viene con FactorMetric aplicado (FactorMetric*RMSE), por lo que
+    # volver a multiplicar por FactorMetric antes de comparar recupera el RMSE
+    # real, sin importar si el algoritmo internamente maximiza (DDS) o minimiza
+    # (SCE-UA/LHS).
+    id_min          = np.argmin(FactorMetric * Metric)
+    BestParams      = Params[id_min, :]
+    BestParamsDict  = dict(zip(['Alpha', 'Beta', 'Gamma', 'Factor-Kc_m'], BestParams))
     BestAREM    = FactorMetric * Metric[id_min]
     Metric      = FactorMetric * Metric
 
@@ -1498,6 +1510,8 @@ def Plot_SWY(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
     plt.savefig(FileName)
     plt.close()
 
+    return BestParamsDict
+
 def Plot_SDR(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
 
     # Metric and parameters
@@ -1522,8 +1536,17 @@ def Plot_SDR(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
     Sim         = Sim.transpose()
 
     # Best Parameters
-    id_min      = np.argmin(Metric)
-    BestParams  = Params[id_min, :]
+    # Metric ya viene con FactorMetric aplicado (FactorMetric*RMSE), por lo que
+    # volver a multiplicar por FactorMetric antes de comparar recupera el RMSE
+    # real, sin importar si el algoritmo internamente maximiza (DDS) o minimiza
+    # (SCE-UA/LHS).
+    id_min          = np.argmin(FactorMetric * Metric)
+    BestParams      = Params[id_min, :]
+    # Orden de columnas tal como se escribe en SDR_Metric_{Suffix}.csv:
+    # sdr_max, k_param, ic_0_param, l_max, Factor-C, Factor-P
+    BestParamsDict  = dict(zip(
+        ['sdr_max', 'Borselli-K_SDR', 'IC0', 'L_max', 'Factor-C', 'Factor-P'],
+        BestParams))
     BestAREM    = FactorMetric * Metric[id_min]
     Metric      = FactorMetric * Metric
 
@@ -1593,6 +1616,8 @@ def Plot_SDR(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
     plt.savefig(FileName)
     plt.close()
 
+    return BestParamsDict
+
 def Plot_NDR_N(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
 
     # Metric and parameters
@@ -1617,8 +1642,15 @@ def Plot_NDR_N(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
     Sim         = Sim.transpose()
 
     # Best Parameters
-    id_min      = np.argmin(Metric)
-    BestParams  = Params[id_min, :]
+    # Metric ya viene con FactorMetric aplicado (FactorMetric*RMSE), por lo que
+    # volver a multiplicar por FactorMetric antes de comparar recupera el RMSE
+    # real, sin importar si el algoritmo internamente maximiza (DDS) o minimiza
+    # (SCE-UA/LHS).
+    id_min          = np.argmin(FactorMetric * Metric)
+    BestParams      = Params[id_min, :]
+    BestParamsDict  = dict(zip(
+        ['SubCri_Len_N', 'Sub_Eff_N', 'Borselli-K_NDR', 'Factor_Load_N', 'Factor_Eff_N'],
+        BestParams))
     BestAREM    = FactorMetric * Metric[id_min]
     Metric      = FactorMetric * Metric
 
@@ -1680,6 +1712,8 @@ def Plot_NDR_N(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
     plt.savefig(FileName)
     plt.close()
 
+    return BestParamsDict
+
 def Plot_NDR_P(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
 
     # Metric and parameters
@@ -1704,8 +1738,15 @@ def Plot_NDR_P(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
     Sim         = Sim.transpose()
 
     # Best Parameters
-    id_min      = np.argmin(Metric)
-    BestParams  = Params[id_min, :]
+    # Metric ya viene con FactorMetric aplicado (FactorMetric*RMSE), por lo que
+    # volver a multiplicar por FactorMetric antes de comparar recupera el RMSE
+    # real, sin importar si el algoritmo internamente maximiza (DDS) o minimiza
+    # (SCE-UA/LHS).
+    id_min          = np.argmin(FactorMetric * Metric)
+    BestParams      = Params[id_min, :]
+    BestParamsDict  = dict(zip(
+        ['Borselli-K_NDR', 'Factor_Load_P', 'Factor_Eff_P'],
+        BestParams))
     BestAREM    = FactorMetric * Metric[id_min]
     Metric      = FactorMetric * Metric
 
@@ -1750,6 +1791,8 @@ def Plot_NDR_P(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
     plt.tight_layout()
     plt.savefig(FileName)
     plt.close()
+
+    return BestParamsDict
 
 # --------------------------------------------------------------------------
 # Name        : ismember.py

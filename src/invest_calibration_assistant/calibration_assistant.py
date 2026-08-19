@@ -1246,14 +1246,29 @@ def execute(args):
         'NDR_P': si.Plot_NDR_P,
     }.get(model_name)
 
+    best_params = None
     if _plot_fn is not None:
-        _plot_fn(workspace, project_name, fo_label, workspace, factor_metric)
+        try:
+            best_params = _plot_fn(workspace, project_name, fo_label, workspace, factor_metric)
+        except Exception:
+            LOGGER.exception(
+                'Could not generate calibration plots / determine the best-fit '
+                'parameter set; falling back to the initial parameter guess.')
 
     # ------------------------------------------------------------------
     # 9. Final run with best-fit parameters
     # ------------------------------------------------------------------
+    if best_params:
+        LOGGER.info(f'Best-fit parameters found by calibration: {best_params}')
+        final_params_val = {**params_val, **best_params}
+    else:
+        LOGGER.warning(
+            'No valid best-fit parameter set was found by the calibration run; '
+            'using the initial parameter guess for the final run instead.')
+        final_params_val = params_val
+
     LOGGER.info('Running InVEST with best-fit parameters …')
-    _run_best_params(workspace, model_name, mp, user_data, params_val, si)
+    _run_best_params(workspace, model_name, mp, user_data, final_params_val, si)
 
     LOGGER.info('=' * 60)
     LOGGER.info(f'Calibration complete: {model_name}')

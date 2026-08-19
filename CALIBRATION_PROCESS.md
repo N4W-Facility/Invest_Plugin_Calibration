@@ -141,6 +141,9 @@ Start
   │        - Dotty plots: metric vs each parameter
   │
   ├─ 7. Final run with best-fit parameters
+  │        - Uses the parameter set found in step 6 (correct best iteration,
+  │          see "Known error (fixed)" note below — this used to silently
+  │          rerun with the initial Parameters.csv guess instead)
   │        - Uses full watersheds (Full Watersheds input)
   │        - Saves results to OUTPUTS/<MODEL>_best/
   │
@@ -185,6 +188,8 @@ MSE = mean((3500 - 4120)²) = 384400  → returned to Spotpy (×-1 for DDS)
 | **RRMSE** – Relative RMSE | `RMSE / mean(Obs)` | Dimensionless; useful across different watersheds |
 
 > **Sign note:** DDS internally *maximizes* the objective function, so the plugin multiplies the metric by `–1` when using DDS. LHS and SCE-UA minimize directly.
+>
+> **Known error (fixed):** the stored metric in `EVALUATIONS/<MODEL>_Metric_<suffix>.csv` already has this `×–1` applied for DDS. Selecting the best iteration must undo that sign before comparing (`FactorMetric × Metric`), otherwise `argmin` on the raw DDS values picks the row with the *largest* real error instead of the smallest — i.e. the worst fit, not the best. This was reported as ["Plugin is choosing the worst fit for output, not best"](https://github.com/N4W-Facility/Invest_Plugin_Calibration/issues/2) and is now fixed in `Plot_AWY`/`Plot_SWY`/`Plot_SDR`/`Plot_NDR_N`/`Plot_NDR_P`.
 
 ---
 
@@ -263,6 +268,34 @@ For NDR models, the biophysical table must include columns `load_type_n` and `lo
 
 ---
 
+## Required `Status_Cal_*` columns in the biophysical table
+
+`Factor_BioTable()` (in `Spotpy_InVEST.py`) is the function that applies each calibration factor to the biophysical table on every iteration. For each row where the matching `Status_Cal_*` flag equals `1`, it **literally multiplies** the original value by the calibrated factor (and rounds/clamps it); rows where the flag is `0` keep their original value untouched. This is not a simplification — it is exactly what the code does:
+
+```python
+Values = round(Table['usle_c'] * round(Params['Factor-C'], 2), 5)
+Values[Values > 1] = 1
+Table.loc[Table['Status_Cal_C'] == 1, 'usle_c'] = Values.loc[Table['Status_Cal_C'] == 1]
+```
+
+These `Status_Cal_*` columns are **plugin-specific**, not standard InVEST biophysical table fields — InVEST itself ignores them. They must be added manually to your biophysical table (the dummy dataset already includes them):
+
+| Column | Required for | Multiplies column | Cap |
+|--------|---------------|--------------------|-----|
+| `Status_Cal_Kc` | AWY, SWY | `Kc` (AWY) / `Kc_1`…`Kc_12` (SWY) | ≤ 1.2 |
+| `Status_Cal_C` | SDR | `usle_c` | ≤ 1 |
+| `Status_Cal_P` | SDR | `usle_p` | ≤ 1 |
+| `Status_Cal_Load_N` | NDR_N | `load_n` | — |
+| `Status_Cal_Eff_N` | NDR_N | `eff_n` | — |
+| `Status_Cal_Load_P` | NDR_P | `load_p` | — |
+| `Status_Cal_Eff_P` | NDR_P | `eff_p` | — |
+
+Only the column(s) for the model you're running are needed.
+
+> **Known error (reported by a user, fixed in docs — code behavior unchanged):** running calibration on a biophysical table that doesn't have these columns fails with `KeyError: 'Status_Cal_C'` (or `'Status_Cal_P'`, etc.), because `Factor_BioTable()` indexes the column directly with no fallback. If you hit this, add the missing column(s) with value `1` on every row (unless you need to exclude specific LULC classes from calibration, in which case set `0` on those rows).
+
+---
+
 ## Quick glossary
 
 | Term | Meaning |
@@ -276,4 +309,4 @@ For NDR models, the biophysical table must include columns `load_type_n` and `lo
 | **Z (AWY)** | Zhang seasonality constant controlling rainfall–runoff partitioning |
 | **measured-runoff** | `load_type` value: `load_n`/`load_p` are measured export values |
 | **application-rate** | `load_type` value: `load_n`/`load_p` are fertilizer input rates |
-| **Status_Cal_*** | Biophysical table column: 1 = row is modified during calibration, 0 = row kept fixed |
+| **Status_Cal_*** | Biophysical table column: 1 = row is modified during calibration, 0 = row kept fixed (see [Required `Status_Cal_*` columns](#required-status_cal_-columns-in-the-biophysical-table)) |

@@ -73,6 +73,28 @@ ws_id,AWY,SWY,SDR,NDR_N,NDR_P
 | `NDR_N` | kg/year | Observed nitrogen load |
 | `NDR_P` | kg/year | Observed phosphorus load |
 
+### Biophysical table — required `Status_Cal_*` columns
+
+The biophysical table you point the plugin to must include **extra `Status_Cal_*` columns** on top of the standard InVEST biophysical table columns. These are **not** standard InVEST fields — InVEST itself ignores them — but the calibration plugin requires them to know, row by row (LULC class by LULC class), which biophysical values are allowed to be adjusted by the calibration factor and which must stay fixed at their original value.
+
+If a required `Status_Cal_*` column is missing for the model you're calibrating, the run fails with a `KeyError` (e.g. `KeyError: 'Status_Cal_C'`).
+
+| Column | Required for | Gates | Behavior |
+|--------|---------------|-------|----------|
+| `Status_Cal_Kc` | AWY, SWY | `Kc` (AWY) / `Kc_1` … `Kc_12` (SWY) | `1` = row's Kc value is multiplied by the calibrated `Factor-Kc`; `0` = Kc kept as-is |
+| `Status_Cal_C` | SDR | `usle_c` | `1` = row's C value is multiplied by the calibrated `Factor-C`; `0` = C kept as-is |
+| `Status_Cal_P` | SDR | `usle_p` | `1` = row's P value is multiplied by the calibrated `Factor-P`; `0` = P kept as-is |
+| `Status_Cal_Load_N` | NDR_N | `load_n` | `1` = row's N load is multiplied by the calibrated `Factor_Load_N`; `0` = kept as-is |
+| `Status_Cal_Eff_N` | NDR_N | `eff_n` | `1` = row's N efficiency is multiplied by the calibrated `Factor_Eff_N`; `0` = kept as-is |
+| `Status_Cal_Load_P` | NDR_P | `load_p` | `1` = row's P load is multiplied by the calibrated `Factor_Load_P`; `0` = kept as-is |
+| `Status_Cal_Eff_P` | NDR_P | `eff_p` | `1` = row's P efficiency is multiplied by the calibrated `Factor_Eff_P`; `0` = kept as-is |
+
+Only the column(s) relevant to the model you're running are required — e.g. calibrating SDR only requires `Status_Cal_C` and `Status_Cal_P`, not the NDR or Kc columns.
+
+If you don't need to exclude specific LULC classes from calibration, the simplest fix is to add the required column(s) with the value `1` on every row.
+
+See the [Dummy dataset](#dummy-dataset) below for a biophysical table that already includes these columns as a reference.
+
 ### Dummy dataset
 
 A complete set of sample input files (rasters, shapefiles, biophysical table, Parameters.csv, and Obs_Data.csv) is available for testing all five models:
