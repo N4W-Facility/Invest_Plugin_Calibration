@@ -1594,21 +1594,21 @@ def Plot_SDR(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
     ax.set_ylabel(f'{NameMetric}' + r' $(ton/year)$', fontsize=16)
     ax.set_title(r'L$_{max}$ = ' + str(BestParams[3]), fontsize=16)
 
-    # Plot Dotty Factor-Kc
+    # Plot Dotty Factor-C
     ax = axes[1,1]
     ax.scatter(Params[:, 4], Metric, s=30, color=[0, 0.5, 0.5], alpha=0.2)
     ax.scatter(BestParams[4], BestAREM, s=50, color=[1, 0, 0])
-    ax.set_xlabel(r'Factor$_{P}$', fontsize=16)
+    ax.set_xlabel(r'Factor$_{C}$', fontsize=16)
     ax.set_ylabel(f'{NameMetric}' + r' $(ton/year)$', fontsize=16)
-    ax.set_title(r'Factor$_{P}$ = ' + str(BestParams[4]), fontsize=16)
+    ax.set_title(r'Factor$_{C}$ = ' + str(BestParams[4]), fontsize=16)
 
-    # Plot Dotty Factor-Kc
+    # Plot Dotty Factor-P
     ax = axes[1,2]
     ax.scatter(Params[:, 5], Metric, s=30, color=[0, 0.5, 0.5], alpha=0.2)
     ax.scatter(BestParams[5], BestAREM, s=50, color=[1, 0, 0])
-    ax.set_xlabel(r'Factor$_{C}$', fontsize=16)
+    ax.set_xlabel(r'Factor$_{P}$', fontsize=16)
     ax.set_ylabel(f'{NameMetric}' + r' $(ton/year)$', fontsize=16)
-    ax.set_title(r'Factor$_{C}$ = ' + str(BestParams[5]), fontsize=16)
+    ax.set_title(r'Factor$_{P}$ = ' + str(BestParams[5]), fontsize=16)
 
     # Save Figure
     FileName = os.path.join(ProjectPath, 'FIGURES', 'Calibration_SDR.jpg')
@@ -1678,9 +1678,9 @@ def Plot_NDR_N(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
     ax = axes[0,2]
     ax.scatter(Params[:, 1], Metric, s=30, color=[0, 0.5, 0.5], alpha=0.2)
     ax.scatter(BestParams[1], BestAREM, s=50, color=[1, 0, 0])
-    ax.set_xlabel(r'SubCri$_{Eff_N}$', fontsize=16)
+    ax.set_xlabel(r'Sub$_{Eff_N}$', fontsize=16)
     ax.set_ylabel(f'{NameMetric}' + r' $(kg/year)$', fontsize=16)
-    ax.set_title(r'SubCri$_{Eff_N}$ = ' + str(BestParams[1]), fontsize=16)
+    ax.set_title(r'Sub$_{Eff_N}$ = ' + str(BestParams[1]), fontsize=16)
 
     # Plot Dotty Factor-Kc
     ax = axes[0,3]
@@ -1719,8 +1719,8 @@ def Plot_NDR_P(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
     # Metric and parameters
     FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'NDR_P_Metric_{Suffix}.csv')
     Tmp         = np.loadtxt(FileName, delimiter=',', skiprows=1)
-    Params      = Tmp[:, :3]
-    Metric      = Tmp[:, 3]
+    Params      = Tmp[:, :5]
+    Metric      = Tmp[:, 5]
 
     # Observed
     FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'NDR_P_Obs_{Suffix}.csv')
@@ -1745,13 +1745,13 @@ def Plot_NDR_P(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
     id_min          = np.argmin(FactorMetric * Metric)
     BestParams      = Params[id_min, :]
     BestParamsDict  = dict(zip(
-        ['Borselli-K_NDR', 'Factor_Load_P', 'Factor_Eff_P'],
+        ['SubCri_Len_P', 'Sub_Eff_P', 'Borselli-K_NDR', 'Factor_Load_P', 'Factor_Eff_P'],
         BestParams))
     BestAREM    = FactorMetric * Metric[id_min]
     Metric      = FactorMetric * Metric
 
     # Scatter Plot
-    fig, axes = plt.subplots(2, 3, figsize=(16, 10))
+    fig, axes = plt.subplots(2, 4, figsize=(16, 10))
 
     # Plot Obs Vs Sim
     ax = axes[0,0]
@@ -1762,29 +1762,45 @@ def Plot_NDR_P(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
     ax.set_ylabel(r'Simulated $(kg/year)$', fontsize=16)
     ax.set_title(f'{NameMetric}' + ' = ' + str(round(BestAREM, 2)) + r' $(kg/year)$', fontsize=16)
 
-    # Plot Dotty Factor-Kc
+    # Plot Dotty SubCri_Len_P
     ax = axes[0,1]
-    ax.scatter(Params[:, 0], Metric, s=30, color=[0, 0.5, 0.5], alpha=0.2)
+    ax.scatter(Params[:, 0], Metric, s=30, color=[0.6, 0.6, 0.6], alpha=0.2)
     ax.scatter(BestParams[0], BestAREM, s=50, color=[1, 0, 0])
+    ax.set_xlabel(r'SubCri$_{Len_P}$', fontsize=16)
+    ax.set_ylabel(f'{NameMetric}' + r' $(kg/year)$', fontsize=16)
+    ax.set_title(r'SubCri$_{Len_P}$ = ' + str(BestParams[0]), fontsize=16)
+
+    # Plot Dotty Sub_Eff_P
+    ax = axes[0,2]
+    ax.scatter(Params[:, 1], Metric, s=30, color=[0, 0.5, 0.5], alpha=0.2)
+    ax.scatter(BestParams[1], BestAREM, s=50, color=[1, 0, 0])
+    ax.set_xlabel(r'Sub$_{Eff_P}$', fontsize=16)
+    ax.set_ylabel(f'{NameMetric}' + r' $(kg/year)$', fontsize=16)
+    ax.set_title(r'Sub$_{Eff_P}$ = ' + str(BestParams[1]), fontsize=16)
+
+    # Plot Dotty Borselli-K
+    ax = axes[0,3]
+    ax.scatter(Params[:, 2], Metric, s=30, color=[0, 0.5, 0.5], alpha=0.2)
+    ax.scatter(BestParams[2], BestAREM, s=50, color=[1, 0, 0])
     ax.set_xlabel(r'Borselli$_{K}$', fontsize=16)
     ax.set_ylabel(f'{NameMetric}' + r' $(kg/year)$', fontsize=16)
-    ax.set_title(r'Borselli$_{K}$ = ' + str(BestParams[0]), fontsize=16)
+    ax.set_title(r'Borselli$_{K}$ = ' + str(BestParams[2]), fontsize=16)
 
-    # Plot Dotty Z-Params
-    ax = axes[0,2]
-    ax.scatter(Params[:, 1], Metric, s=30, color=[1, 0.656, 0], alpha=0.2)
-    ax.scatter(BestParams[1], BestAREM, s=50, color=[1, 0, 0])
+    # Plot Dotty Factor_Load_P
+    ax = axes[1,0]
+    ax.scatter(Params[:, 3], Metric, s=30, color=[1, 0.656, 0], alpha=0.2)
+    ax.scatter(BestParams[3], BestAREM, s=50, color=[1, 0, 0])
     ax.set_xlabel(r'Factor$_{Load_P}$', fontsize=16)
     ax.set_ylabel(f'{NameMetric}' + r' $(kg/year)$', fontsize=16)
-    ax.set_title(r'Factor$_{Load_P}$ = ' + str(BestParams[1]), fontsize=16)
+    ax.set_title(r'Factor$_{Load_P}$ = ' + str(BestParams[3]), fontsize=16)
 
-    # Plot Dotty Factor-Kc
-    ax = axes[1,0]
-    ax.scatter(Params[:, 2], Metric, s=30, color=[0.969, 0, 1], alpha=0.2)
-    ax.scatter(BestParams[2], BestAREM, s=50, color=[1, 0, 0])
+    # Plot Dotty Factor_Eff_P
+    ax = axes[1,1]
+    ax.scatter(Params[:, 4], Metric, s=30, color=[0.969, 0, 1], alpha=0.2)
+    ax.scatter(BestParams[4], BestAREM, s=50, color=[1, 0, 0])
     ax.set_xlabel(r'Factor$_{Eff_P}$', fontsize=16)
     ax.set_ylabel(f'{NameMetric}' + r' $(kg/year)$', fontsize=16)
-    ax.set_title(r'Factor$_{Eff_P}$ = ' + str(BestParams[2]), fontsize=16)
+    ax.set_title(r'Factor$_{Eff_P}$ = ' + str(BestParams[4]), fontsize=16)
 
     # Save Figure
     FileName = os.path.join(ProjectPath, 'FIGURES', 'Calibration_NDR_P.jpg')

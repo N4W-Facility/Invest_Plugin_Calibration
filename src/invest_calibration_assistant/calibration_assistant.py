@@ -656,6 +656,8 @@ def _read_param_ranges(parameter_search_ranges_path):
         'Sub_Eff_N':      'Sub_Eff_N',
         'Factor_Load_P':  'Factor_Load_P',
         'Factor_Eff_P':   'Factor_Eff_P',
+        'SubCri_Len_P':   'SubCri_Len_P',
+        'Sub_Eff_P':      'Sub_Eff_P',
         'Borselli-K_SDR': 'Borselli-K_SDR',
         'Borselli-K_NDR': 'Borselli-K_NDR',
     }
@@ -683,7 +685,7 @@ def _build_spotpy_params(model_name, params_min, params_max):
         'SWY':   ['Alpha', 'Beta', 'Gamma', 'Factor-Kc_m'],
         'SDR':   ['sdr_max', 'Borselli-K_SDR', 'IC0', 'L_max', 'Factor-C', 'Factor-P'],
         'NDR_N': ['SubCri_Len_N', 'Sub_Eff_N', 'Borselli-K_NDR', 'Factor_Load_N', 'Factor_Eff_N'],
-        'NDR_P': ['Borselli-K_NDR', 'Factor_Load_P', 'Factor_Eff_P'],
+        'NDR_P': ['SubCri_Len_P', 'Sub_Eff_P', 'Borselli-K_NDR', 'Factor_Load_P', 'Factor_Eff_P'],
     }
 
     return [
@@ -743,8 +745,9 @@ def _execute_awy_direct(workspace, mp, user_data, vector, metric_name, factor_me
     sim_df  = pd.read_csv(os.path.join(out_dir, 'output',
                           f'watershed_results_wyield{suffix_part}.csv'))
     sim_val = sim_df['wyield_vol'].values
-    [_, idx] = si.ismember(sim_df['ws_id'].values, obs_df['ws_id'].values)
+    [I, idx] = si.ismember(sim_df['ws_id'].values, obs_df['ws_id'].values)
     obs_val  = obs_df['AWY'].values[idx]
+    sim_val  = sim_val[I]
     obj      = factor_metric * si.Cal_FunObj(obs_val, sim_val, metric_name)
 
     sl = user_data['Suffix']
@@ -812,7 +815,7 @@ def _execute_swy_direct(workspace, mp, user_data, vector, metric_name, factor_me
 
     sl = user_data['Suffix']
     _save_eval_csv(workspace, f'SWY_Metric_{sl}.csv',
-                   f'Alpha,Beta,Gamma,Factor-Kc,{metric_name}',
+                   f'Alpha,Beta,Gamma,Factor-Kc_m,{metric_name}',
                    [f'{alpha:.3f},{beta:.3f},{gamma:.3f},{kc_m:.2f},{obj:.2f}'])
     _save_eval_csv(workspace, f'SWY_Obs_{sl}.csv', 'Obs',
                    [f'{v:.2f}' for v in obs_val])
@@ -901,13 +904,18 @@ def _execute_ndr_direct(workspace, mp, user_data, vector, metric_name, factor_me
                      'subsurface_critical_length_n': '%.2f' % subcri_n,
                      'subsurface_eff_n':             '%.2f' % sub_eff_n}
     else:  # NDR_P
-        # Borselli-K_NDR, Factor_Load_P, Factor_Eff_P
-        k_ndr, load_p, eff_p = (float(vector[i]) for i in range(3))
-        params = {'Borselli-K_NDR': k_ndr, 'Factor_Load_P': load_p, 'Factor_Eff_P': eff_p}
-        print(f'NDR_P  K={k_ndr:.2f}  Load={load_p:.2f}  Eff={eff_p:.2f}')
+        # Vector order matches _build_spotpy_params:
+        # SubCri_Len_P, Sub_Eff_P, Borselli-K_NDR, Factor_Load_P, Factor_Eff_P
+        subcri_p, sub_eff_p, k_ndr, load_p, eff_p = (float(vector[i]) for i in range(5))
+        params = {
+            'SubCri_Len_P': subcri_p, 'Sub_Eff_P': sub_eff_p,
+            'Borselli-K_NDR': k_ndr, 'Factor_Load_P': load_p, 'Factor_Eff_P': eff_p,
+        }
+        print(f'NDR_P  SubCri={subcri_p:.2f}  SubEff={sub_eff_p:.2f}  '
+              f'K={k_ndr:.2f}  Load={load_p:.2f}  Eff={eff_p:.2f}')
         ndr_extra = {'calc_n': False, 'calc_p': True,
-                     'subsurface_critical_length_p': '%.2f' % load_p,
-                     'subsurface_eff_p':             '%.2f' % eff_p}
+                     'subsurface_critical_length_p': '%.2f' % subcri_p,
+                     'subsurface_eff_p':             '%.2f' % sub_eff_p}
 
     table = si.Factor_BioTable(mp['biophysical_table_path'], params, user_data)
     if model_name == 'NDR_N' and 'load_type_n' not in table.columns:
@@ -961,8 +969,8 @@ def _execute_ndr_direct(workspace, mp, user_data, vector, metric_name, factor_me
         hdr   = f'SubCri_Len_N,Sub_Eff_N,Borselli-K,Factor_Load_N,Factor_Eff_N,{metric_name}'
         p_row = f'{subcri_n:.2f},{sub_eff_n:.2f},{k_ndr:.2f},{load_n:.2f},{eff_n:.2f},{obj:.2f}'
     else:
-        hdr   = f'Borselli-K,Factor_Load_P,Factor_Eff_P,{metric_name}'
-        p_row = f'{k_ndr:.2f},{load_p:.2f},{eff_p:.2f},{obj:.2f}'
+        hdr   = f'SubCri_Len_P,Sub_Eff_P,Borselli-K,Factor_Load_P,Factor_Eff_P,{metric_name}'
+        p_row = f'{subcri_p:.2f},{sub_eff_p:.2f},{k_ndr:.2f},{load_p:.2f},{eff_p:.2f},{obj:.2f}'
 
     _save_eval_csv(workspace, f'{model_name}_Metric_{sl}.csv', hdr, [p_row])
     _save_eval_csv(workspace, f'{model_name}_Obs_{sl}.csv', 'Obs',
@@ -1077,8 +1085,8 @@ def _run_best_params(workspace, model_name, mp, user_data, params_val, si):
             invest_args['subsurface_critical_length_n'] = '%.2f' % params_val.get('SubCri_Len_N', 150)
             invest_args['subsurface_eff_n']             = '%.2f' % params_val.get('Sub_Eff_N', 0.8)
         else:
-            invest_args['subsurface_critical_length_p'] = '%.2f' % params_val.get('Factor_Load_P', 1.0)
-            invest_args['subsurface_eff_p']             = '%.2f' % params_val.get('Factor_Eff_P', 1.0)
+            invest_args['subsurface_critical_length_p'] = '%.2f' % params_val.get('SubCri_Len_P', 150)
+            invest_args['subsurface_eff_p']             = '%.2f' % params_val.get('Sub_Eff_P', 0.8)
         if sub_ws:
             invest_args['sub_watersheds_path'] = sub_ws
         _ndr.execute(invest_args)

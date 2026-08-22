@@ -25,7 +25,7 @@ No scripting or external tools are required.
 | **SWY** | Seasonal Water Yield | `Alpha`, `Beta`, `Gamma`, `Factor-Kc_m` |
 | **SDR** | Sediment Delivery Ratio | `sdr_max`, `Borselli-K`, `IC0`, `L_max`, `Factor-C`, `Factor-P` |
 | **NDR\_N** | Nutrient Delivery Ratio – Nitrogen | `SubCri_Len_N`, `Sub_Eff_N`, `Borselli-K`, `Factor_Load_N`, `Factor_Eff_N` |
-| **NDR\_P** | Nutrient Delivery Ratio – Phosphorus | `Borselli-K`, `Factor_Load_P`, `Factor_Eff_P` |
+| **NDR\_P** | Nutrient Delivery Ratio – Phosphorus | `SubCri_Len_P`, `Sub_Eff_P`, `Borselli-K`, `Factor_Load_P`, `Factor_Eff_P` |
 
 ---
 

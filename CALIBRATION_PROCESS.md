@@ -105,9 +105,13 @@ Models phosphorus loading, retention, and export to streams.
 
 | Parameter | Type | Description | Typical range |
 |-----------|------|-------------|---------------|
+| `SubCri_Len_P` | Model argument | Subsurface critical flow path length P (m) | 30 – 500² |
+| `Sub_Eff_P` | Model argument | Subsurface retention efficiency P | 0.0 – 0.8² |
 | `Borselli-K_NDR` | Model argument | Borselli calibration constant (k) | 0.5 – 10.0 |
 | `Factor_Load_P` | Table multiplier | Scales the `load_p` column | 0.5 – 2.0 |
 | `Factor_Eff_P` | Table multiplier | Scales the `eff_p` column (capped at 1.0) | 0.5 – 1.49¹ |
+
+> ² Ranges mirror `SubCri_Len_N`/`Sub_Eff_N` as a starting point — phosphorus subsurface transport behaves differently from nitrogen (stronger soil adsorption), so validate these against your own site literature before running a real calibration.
 
 > ¹ Upper bound depends on `max(eff_p)` in the biophysical table: `Factor_Eff_P_max = 1.0 / max(eff_p)`
 
