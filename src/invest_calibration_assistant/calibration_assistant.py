@@ -861,7 +861,7 @@ def _execute_sdr_direct(workspace, mp, user_data, vector, metric_name, factor_me
         'workspace_dir':              out_dir,
     }
     if mp['sub_watersheds_path']:
-        sdr_args['watersheds_path'] = mp['sub_watersheds_path']
+        sdr_args['sub_watersheds_path'] = mp['sub_watersheds_path']
 
     _sdr.execute(sdr_args)
 
@@ -1063,6 +1063,8 @@ def _run_best_params(workspace, model_name, mp, user_data, params_val, si):
             'results_suffix':             suffix,
             'workspace_dir':              out_dir,
         }
+        if sub_ws:
+            invest_args['sub_watersheds_path'] = sub_ws
         _sdr.execute(invest_args)
 
     elif model_name in ('NDR_N', 'NDR_P'):
