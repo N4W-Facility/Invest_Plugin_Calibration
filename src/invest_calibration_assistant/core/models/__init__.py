@@ -9,10 +9,18 @@ the same ``ModelPlugin`` contract and will register here as they are ported from
 from __future__ import annotations
 
 from .base import IterationContext, ModelPlugin, append_eval_csv
+from .awy import PLUGIN as _AWY
+from .ndr import PLUGIN_N as _NDR_N
+from .ndr import PLUGIN_P as _NDR_P
 from .sdr import PLUGIN as _SDR
+from .swy import PLUGIN as _SWY
 
 REGISTRY: dict[str, ModelPlugin] = {
+    _AWY.name: _AWY,
+    _SWY.name: _SWY,
     _SDR.name: _SDR,
+    _NDR_N.name: _NDR_N,
+    _NDR_P.name: _NDR_P,
 }
 
 SUPPORTED_MODELS = tuple(REGISTRY)

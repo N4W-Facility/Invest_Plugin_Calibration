@@ -65,6 +65,22 @@ def append_eval_csv(evaluations_dir: str, name: str, header: str, rows: list[str
             f.write(row + "\n")
 
 
+def write_iteration_eval(ctx, model: str, metric_header: str, param_row: str,
+                         obs_val, sim_val, matched_ws_ids) -> None:
+    """Append the per-iteration rows every model writes: ``<MODEL>_Metric``,
+    ``_Obs``, ``_Sim`` (byte-for-byte as the Workbench plugin) plus ``_WsId``
+    (written once) so the engine can label the best obs-vs-sim table."""
+    sfx = ctx.suffix
+    ev = ctx.evaluations_dir
+    append_eval_csv(ev, f"{model}_Metric_{sfx}.csv", metric_header, [param_row])
+    append_eval_csv(ev, f"{model}_Obs_{sfx}.csv", "Obs", [f"{v:.2f}" for v in obs_val])
+    append_eval_csv(ev, f"{model}_Sim_{sfx}.csv", "Sim", [f"{v:.2f}" for v in sim_val])
+    wsid_csv = os.path.join(ev, f"{model}_WsId_{sfx}.csv")
+    if not os.path.isfile(wsid_csv):
+        append_eval_csv(ev, f"{model}_WsId_{sfx}.csv", "ws_id",
+                        [str(int(w)) for w in matched_ws_ids])
+
+
 class ModelPlugin:
     name: str = ""
     param_order: list[str] = []

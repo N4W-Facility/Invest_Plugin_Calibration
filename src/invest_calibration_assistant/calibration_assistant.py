@@ -1101,11 +1101,20 @@ def _run_best_params(workspace, model_name, mp, user_data, params_val, si):
 # ---------------------------------------------------------------------------
 
 # InVEST-input keys the core needs, per model. LULC + biophysical + calibration
-# watersheds + TFA are common; the rest are model-specific.
+# watersheds + TFA are common; the rest are model-specific. Common keys
+# (watersheds_path, sub_watersheds_path, calibration_watersheds_path,
+# threshold_flow_accumulation) are always forwarded.
+_COMMON_INPUT_KEYS = ['lulc_path', 'biophysical_table_path',
+                      'calibration_watersheds_path', 'watersheds_path',
+                      'sub_watersheds_path', 'threshold_flow_accumulation']
 _CORE_INPUT_KEYS = {
-    'SDR': ['lulc_path', 'biophysical_table_path', 'dem_path', 'erosivity_path',
-            'erodibility_path', 'calibration_watersheds_path', 'watersheds_path',
-            'sub_watersheds_path', 'threshold_flow_accumulation'],
+    'AWY': _COMMON_INPUT_KEYS + ['precipitation_path', 'eto_path',
+                                 'depth_to_root_rest_layer_path', 'pawc_path'],
+    'SWY': _COMMON_INPUT_KEYS + ['dem_path', 'soil_group_path', 'eto_raster_table',
+                                 'precip_raster_table', 'rain_events_table_path'],
+    'SDR': _COMMON_INPUT_KEYS + ['dem_path', 'erosivity_path', 'erodibility_path'],
+    'NDR_N': _COMMON_INPUT_KEYS + ['dem_path', 'precipitation_path'],
+    'NDR_P': _COMMON_INPUT_KEYS + ['dem_path', 'precipitation_path'],
 }
 
 
