@@ -78,10 +78,10 @@ def normalize(config: dict) -> dict:
     cfg["model_inputs"] = mi
 
     cfg.setdefault("run_best", True)
-    # Figures are opt-in: they need a fully working matplotlib (some headless
-    # conda-forge matplotlib-base builds crash in the Agg backend). The engine's
-    # structured `diagnostics` / `obs_vs_sim` cover interpretation without them.
-    cfg.setdefault("make_plots", False)
+    # ``make_plots`` writes FIGURES/dotty_data_<MODEL>.json (always, pure numpy)
+    # and attempts FIGURES/Calibration_<MODEL>.jpg in a separate process, so a
+    # broken native matplotlib only costs the jpg, not the run. Safe to default on.
+    cfg.setdefault("make_plots", True)
     return cfg
 
 
