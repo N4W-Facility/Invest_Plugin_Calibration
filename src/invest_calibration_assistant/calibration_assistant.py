@@ -1097,6 +1097,47 @@ def _run_best_params(workspace, model_name, mp, user_data, params_val, si):
 
 
 # ---------------------------------------------------------------------------
+# Workbench args  ->  shared-core CalibrationConfig
+# ---------------------------------------------------------------------------
+
+# InVEST-input keys the core needs, per model. LULC + biophysical + calibration
+# watersheds + TFA are common; the rest are model-specific.
+_CORE_INPUT_KEYS = {
+    'SDR': ['lulc_path', 'biophysical_table_path', 'dem_path', 'erosivity_path',
+            'erodibility_path', 'calibration_watersheds_path', 'watersheds_path',
+            'sub_watersheds_path', 'threshold_flow_accumulation'],
+}
+
+
+def _build_core_config(args, mp, params_val, params_min, params_max,
+                       model_name, metric, method, n_sim):
+    """Translate the per-field Workbench args into the dict the shared core takes."""
+    from .core.models import PARAM_ORDER_ALL  # noqa: PLC0415
+
+    parameters = {
+        k: {'min': params_min.get(k), 'max': params_max.get(k),
+            'value': params_val.get(k)}
+        for k in PARAM_ORDER_ALL[model_name]
+        if k in params_min and k in params_max
+    }
+    model_inputs = {k: (mp.get(k) or None) for k in _CORE_INPUT_KEYS[model_name]}
+    model_inputs['threshold_flow_accumulation'] = mp.get('threshold_flow_accumulation')
+
+    return {
+        'model': model_name,
+        'workspace_dir': args['workspace_dir'],
+        'results_suffix': mp['project_suffix'],
+        'optimizer': {'method': method, 'n_simulations': int(n_sim)},
+        'objective': metric,
+        'parameters': parameters,
+        'observed_data_path': args['observed_data_path'],
+        'model_inputs': model_inputs,
+        'run_best': True,
+        'make_plots': True,
+    }
+
+
+# ---------------------------------------------------------------------------
 # execute()
 # ---------------------------------------------------------------------------
 
@@ -1137,7 +1178,30 @@ def execute(args):
     obs_df = pd.read_csv(args['observed_data_path'])
 
     # ------------------------------------------------------------------
-    # 2. Deferred import of calibration engine
+    # 1b. Shared-core delegation
+    # ------------------------------------------------------------------
+    # Models wired into invest_calibration_assistant.core run through the
+    # UI-independent engine shared with invest-mcp. The rest keep the legacy
+    # in-file path below until they are ported too.
+    from .core import SUPPORTED_MODELS, calibrate as _core_calibrate  # noqa: PLC0415
+    if model_name in SUPPORTED_MODELS:
+        cfg = _build_core_config(args, mp, params_val, params_min, params_max,
+                                 model_name, metric, method, n_sim)
+        result = _core_calibrate(cfg, log=LOGGER.info)
+        if not result.get('ok'):
+            raise ValueError(
+                'Calibration config rejected:\n' +
+                '\n'.join(f"  - [{i['field']}] {i['message']}"
+                          for i in result.get('errors', [])))
+        LOGGER.info('=' * 60)
+        LOGGER.info(f"Calibration complete: {model_name} "
+                    f"({cfg['objective']} = {result['best_objective']:.4g})")
+        LOGGER.info(f"Best-fit parameters: {result['best_parameters']}")
+        LOGGER.info('=' * 60)
+        return {}
+
+    # ------------------------------------------------------------------
+    # 2. Deferred import of calibration engine  (legacy path)
     # ------------------------------------------------------------------
     si = _get_si()
 
