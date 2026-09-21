@@ -1419,7 +1419,7 @@ def Plot_AWY(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
     ax.set_title(r'Factor$_{K_c}$ = ' + str(BestParams[1]), fontsize=16)
 
     # Save Figure
-    FileName = os.path.join(ProjectPath, 'FIGURES', 'Calibration_AWY.jpg')
+    FileName = os.path.join(ProjectPath, 'FIGURES', f'Calibration_AWY_{Suffix}.jpg')
     plt.tight_layout()
     plt.savefig(FileName)
     plt.close()
@@ -1505,7 +1505,7 @@ def Plot_SWY(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
     ax.set_title(r'Factor$_{K_c}$ = ' + str(BestParams[3]), fontsize=16)
 
     # Save Figure
-    FileName = os.path.join(ProjectPath, 'FIGURES', 'Calibration_SWY.jpg')
+    FileName = os.path.join(ProjectPath, 'FIGURES', f'Calibration_SWY_{Suffix}.jpg')
     plt.tight_layout()
     plt.savefig(FileName)
     plt.close()
@@ -1611,7 +1611,7 @@ def Plot_SDR(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
     ax.set_title(r'Factor$_{P}$ = ' + str(BestParams[5]), fontsize=16)
 
     # Save Figure
-    FileName = os.path.join(ProjectPath, 'FIGURES', 'Calibration_SDR.jpg')
+    FileName = os.path.join(ProjectPath, 'FIGURES', f'Calibration_SDR_{Suffix}.jpg')
     plt.tight_layout()
     plt.savefig(FileName)
     plt.close()
@@ -1707,7 +1707,7 @@ def Plot_NDR_N(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
     ax.set_title(r'Factor$_{Eff_N}$ = ' + str(BestParams[4]), fontsize=16)
 
     # Save Figure
-    FileName = os.path.join(ProjectPath, 'FIGURES', 'Calibration_NDR_N.jpg')
+    FileName = os.path.join(ProjectPath, 'FIGURES', f'Calibration_NDR_N_{Suffix}.jpg')
     plt.tight_layout()
     plt.savefig(FileName)
     plt.close()
@@ -1803,7 +1803,7 @@ def Plot_NDR_P(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
     ax.set_title(r'Factor$_{Eff_P}$ = ' + str(BestParams[4]), fontsize=16)
 
     # Save Figure
-    FileName = os.path.join(ProjectPath, 'FIGURES', 'Calibration_NDR_P.jpg')
+    FileName = os.path.join(ProjectPath, 'FIGURES', f'Calibration_NDR_P_{Suffix}.jpg')
     plt.tight_layout()
     plt.savefig(FileName)
     plt.close()

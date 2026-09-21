@@ -63,7 +63,7 @@ MODEL_SPEC = spec.ModelSpec(
     module_name=__name__,
     userguide='',
     input_field_order=[
-        ['workspace_dir', 'results_suffix'],
+        ['workspace_dir'],
         ['model_name'],
 
         # ── Inputs shared by all models ──────────────────────────────────
@@ -116,14 +116,6 @@ MODEL_SPEC = spec.ModelSpec(
                 'Sub-folders EVALUATIONS, PARAMETERS, OUTPUTS, FIGURES '
                 'and TMP are created automatically.')
         )),
-        spec.StringInput(
-            id='results_suffix',
-            name=gettext('File Suffix'),
-            about=gettext(
-                'Optional text appended to every output file name.'),
-            required=False,
-            regexp='[a-zA-Z0-9_-]*',
-        ),
         spec.NumberInput(
             id='n_workers',
             name=gettext('taskgraph n_workers'),
@@ -556,7 +548,7 @@ def _build_model_paths(args):
         'watersheds_path':              _get('watersheds_path') or args['calibration_watersheds_path'],
         'sub_watersheds_path':          _get('awy_sub_watersheds_path'),
         'threshold_flow_accumulation':  float(args['threshold_flow_accumulation']) if args.get('threshold_flow_accumulation') else None,
-        'project_suffix':               _get('project_suffix') or _get('results_suffix') or m,
+        'project_suffix':               _get('project_suffix') or m,
 
         # -- AWY + NDR
         'precipitation_path':           _get('precipitation_path'),
@@ -991,16 +983,17 @@ def _run_best_params(workspace, model_name, mp, user_data, params_val, si):
     from natcap.invest.sdr import sdr as _sdr             # noqa: PLC0415
     from natcap.invest.ndr import ndr as _ndr             # noqa: PLC0415
 
+    out_dir = os.path.join(workspace, 'OUTPUTS', f'{model_name}_best')
+    os.makedirs(out_dir, exist_ok=True)
+    suffix  = user_data['Suffix']
+
     table = si.Factor_BioTable(mp['biophysical_table_path'], params_val, user_data)
     if model_name == 'NDR_N' and 'load_type_n' not in table.columns:
         table['load_type_n'] = 'measured-runoff'
     if model_name == 'NDR_P' and 'load_type_p' not in table.columns:
         table['load_type_p'] = 'measured-runoff'
-    tmp_bio = os.path.join(workspace, 'TMP', f'{model_name}_BioTable_best.csv')
+    tmp_bio = os.path.join(out_dir, f'{model_name}_BioTable_best.csv')
     table.to_csv(tmp_bio, index=False)
-
-    out_dir = os.path.join(workspace, 'OUTPUTS', f'{model_name}_best')
-    suffix  = user_data['Suffix']
     tfa     = '%0.0f' % mp['threshold_flow_accumulation'] if mp['threshold_flow_accumulation'] is not None else ''
     sub_ws  = mp.get('sub_watersheds_path', '')
 
