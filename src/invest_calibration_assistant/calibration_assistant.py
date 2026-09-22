@@ -49,6 +49,10 @@ from natcap.invest.unit_registry import u
 LOGGER = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Lazy Spotpy_InVEST import
+# ---------------------------------------------------------------------------
+
 def _get_si():
     """Lazily import the ``Spotpy_InVEST`` helper module.
 
@@ -612,6 +616,10 @@ def _build_model_paths(args):
     return mp
 
 
+# ---------------------------------------------------------------------------
+# Build UserData dict for Spotpy_InVEST helpers
+# ---------------------------------------------------------------------------
+
 def _build_user_data(model_name, mp):
     """Build the ``UserData`` dict expected by ``Factor_BioTable``.
 
@@ -765,7 +773,7 @@ def _build_spotpy_params(model_name, params_min, params_max):
 
 
 # ---------------------------------------------------------------------------
-# Per-model direct-path simulation functions
+# Shared per-iteration helpers
 # ---------------------------------------------------------------------------
 
 def _save_eval_csv(workspace, name, header, rows):
@@ -795,6 +803,118 @@ def _save_eval_csv(workspace, name, header, rows):
         for row in rows:
             f.write(row + '\n')
 
+
+def _write_temp_biotable(si, mp, user_data, params, workspace, tag):
+    """Apply candidate params to the biophysical table and save it under TMP.
+
+    Shared by every ``_execute_*_direct`` function: each calibration
+    iteration proposes a new parameter set, which is applied to the
+    project's biophysical table and written to
+    ``<workspace>/TMP/<tag>_biophysical.csv`` for the InVEST model run.
+
+    Parameters
+    ----------
+    si : module
+        The ``Spotpy_InVEST`` module, as returned by :func:`_get_si`.
+    mp : dict
+        ``model_paths`` dict from :func:`_build_model_paths`.
+    user_data : dict
+        ``UserData`` dict from :func:`_build_user_data`.
+    params : dict
+        Candidate parameter values for this iteration.
+    workspace : str
+        Calibration workspace directory.
+    tag : str
+        Model tag used in the output file name (e.g. ``'AWY'``, ``'NDR_N'``).
+
+    Returns
+    -------
+    str
+        Path to the written temporary biophysical table CSV.
+    """
+    table = si.Factor_BioTable(mp['biophysical_table_path'], params, user_data)
+    tmp_bio = os.path.join(workspace, 'TMP', f'{tag}_biophysical.csv')
+    table.to_csv(tmp_bio, index=False)
+    return tmp_bio
+
+
+def _score_against_obs(si, sim_df, sim_col, obs_df, obs_col, metric_name, factor_metric):
+    """Match simulated/observed values by ``ws_id`` and score the fit.
+
+    Shared by every ``_execute_*_direct`` function to turn a model run's
+    per-watershed output into the signed objective function value spotpy
+    optimizes.
+
+    Parameters
+    ----------
+    si : module
+        The ``Spotpy_InVEST`` module, as returned by :func:`_get_si`.
+    sim_df : pandas.DataFrame
+        Simulated per-watershed results (must contain ``ws_id`` and
+        ``sim_col``).
+    sim_col : str
+        Column in ``sim_df`` holding the simulated values.
+    obs_df : pandas.DataFrame
+        Observed data table (must contain ``ws_id`` and ``obs_col``).
+    obs_col : str
+        Column in ``obs_df`` holding the observed values.
+    metric_name : str
+        Objective function name, as used by ``Spotpy_InVEST.Cal_FunObj``.
+    factor_metric : float
+        ``+1`` or ``-1``; flips the sign of the metric so every
+        optimization algorithm searches in the same direction.
+
+    Returns
+    -------
+    obj : float
+        ``factor_metric``-adjusted objective function value.
+    obs_val : numpy.ndarray
+        Observed values, matched to ``sim_val`` by ``ws_id``.
+    sim_val : numpy.ndarray
+        Simulated values, matched to ``obs_val`` by ``ws_id``.
+    """
+    [I, idx] = si.ismember(sim_df['ws_id'].values, obs_df['ws_id'].values)
+    obs_val = obs_df[obs_col].values[idx]
+    sim_val = sim_df[sim_col].values[I]
+    obj = factor_metric * si.Cal_FunObj(obs_val, sim_val, metric_name)
+    return obj, obs_val, sim_val
+
+
+def _save_iteration(workspace, tag, suffix, header, row, obs_val, sim_val):
+    """Append one calibration iteration to the model's EVALUATIONS CSVs.
+
+    Shared tail of every ``_execute_*_direct`` function: writes the
+    iteration's parameters/metric row plus the matched obs/sim arrays to
+    ``<tag>_Metric_<suffix>.csv``, ``<tag>_Obs_<suffix>.csv`` and
+    ``<tag>_Sim_<suffix>.csv``.
+
+    Parameters
+    ----------
+    workspace : str
+        Calibration workspace directory.
+    tag : str
+        Model tag used in the output file names (e.g. ``'AWY'``, ``'NDR_N'``).
+    suffix : str
+        Project results suffix (``user_data['Suffix']``).
+    header : str
+        Comma-separated header for the ``_Metric_`` CSV.
+    row : str
+        Comma-separated data row for the ``_Metric_`` CSV.
+    obs_val : numpy.ndarray
+        Observed values for this iteration.
+    sim_val : numpy.ndarray
+        Simulated values for this iteration.
+    """
+    _save_eval_csv(workspace, f'{tag}_Metric_{suffix}.csv', header, [row])
+    _save_eval_csv(workspace, f'{tag}_Obs_{suffix}.csv', 'Obs',
+                   [f'{v:.2f}' for v in obs_val])
+    _save_eval_csv(workspace, f'{tag}_Sim_{suffix}.csv', 'Sim',
+                   [f'{v:.2f}' for v in sim_val])
+
+
+# ---------------------------------------------------------------------------
+# AWY calibration iteration
+# ---------------------------------------------------------------------------
 
 def _execute_awy_direct(workspace, mp, user_data, vector, metric_name, factor_metric, obs_df, si):
     """Run one AWY calibration iteration and score it against observations.
@@ -836,11 +956,9 @@ def _execute_awy_direct(workspace, mp, user_data, vector, metric_name, factor_me
     z, kc = float(vector[0]), float(vector[1])
     params = {'Z': z, 'Factor-Kc': kc}
 
-    print(f'AWY  Z={z:.2f}  Factor-Kc={kc:.2f}')
+    LOGGER.info(f'AWY  Z={z:.2f}  Factor-Kc={kc:.2f}')
 
-    table = si.Factor_BioTable(mp['biophysical_table_path'], params, user_data)
-    tmp_bio = os.path.join(workspace, 'TMP', 'AWY_biophysical.csv')
-    table.to_csv(tmp_bio, index=False)
+    tmp_bio = _write_temp_biotable(si, mp, user_data, params, workspace, 'AWY')
 
     out_dir = os.path.join(workspace, 'OUTPUTS', '01-AWY')
     suffix  = user_data['Suffix']
@@ -864,22 +982,18 @@ def _execute_awy_direct(workspace, mp, user_data, vector, metric_name, factor_me
     suffix_part = f'_{suffix}' if suffix else ''
     sim_df  = pd.read_csv(os.path.join(out_dir, 'output',
                           f'watershed_results_wyield{suffix_part}.csv'))
-    sim_val = sim_df['wyield_vol'].values
-    [I, idx] = si.ismember(sim_df['ws_id'].values, obs_df['ws_id'].values)
-    obs_val  = obs_df['AWY'].values[idx]
-    sim_val  = sim_val[I]
-    obj      = factor_metric * si.Cal_FunObj(obs_val, sim_val, metric_name)
+    obj, obs_val, sim_val = _score_against_obs(
+        si, sim_df, 'wyield_vol', obs_df, 'AWY', metric_name, factor_metric)
 
-    sl = user_data['Suffix']
-    _save_eval_csv(workspace, f'AWY_Metric_{sl}.csv',
-                   f'Z,Factor-Kc,{metric_name}',
-                   [f'{z:.2f},{kc:.2f},{obj:.2f}'])
-    _save_eval_csv(workspace, f'AWY_Obs_{sl}.csv', 'Obs',
-                   [f'{v:.2f}' for v in obs_val])
-    _save_eval_csv(workspace, f'AWY_Sim_{sl}.csv', 'Sim',
-                   [f'{v:.2f}' for v in sim_val])
+    _save_iteration(workspace, 'AWY', user_data['Suffix'],
+                     f'Z,Factor-Kc,{metric_name}',
+                     f'{z:.2f},{kc:.2f},{obj:.2f}', obs_val, sim_val)
     return obj
 
+
+# ---------------------------------------------------------------------------
+# SWY calibration iteration
+# ---------------------------------------------------------------------------
 
 def _execute_swy_direct(workspace, mp, user_data, vector, metric_name, factor_metric, obs_df, si):
     """Run one SWY calibration iteration and score it against observations.
@@ -922,11 +1036,9 @@ def _execute_swy_direct(workspace, mp, user_data, vector, metric_name, factor_me
     alpha, beta, gamma, kc_m = (float(vector[i]) for i in range(4))
     params = {'Alpha': alpha, 'Beta': beta, 'Gamma': gamma, 'Factor-Kc_m': kc_m}
 
-    print(f'SWY  Alpha={alpha:.3f}  Beta={beta:.3f}  Gamma={gamma:.3f}  Kc_m={kc_m:.2f}')
+    LOGGER.info(f'SWY  Alpha={alpha:.3f}  Beta={beta:.3f}  Gamma={gamma:.3f}  Kc_m={kc_m:.2f}')
 
-    table = si.Factor_BioTable(mp['biophysical_table_path'], params, user_data)
-    tmp_bio = os.path.join(workspace, 'TMP', 'SWY_biophysical.csv')
-    table.to_csv(tmp_bio, index=False)
+    tmp_bio = _write_temp_biotable(si, mp, user_data, params, workspace, 'SWY')
 
     out_dir  = os.path.join(workspace, 'OUTPUTS', '02-SWY')
     suffix   = user_data['Suffix']
@@ -961,22 +1073,19 @@ def _execute_swy_direct(workspace, mp, user_data, vector, metric_name, factor_me
     sim_df  = si.calculate_zonal_stats(mp['calibration_watersheds_path'],
                                        raster, os.path.join(workspace, 'TMP'),
                                        Suffix='SWY')
-    sim_val = sim_df['mean'].values
-    [I, idx] = si.ismember(sim_df['ws_id'].values, obs_df['ws_id'].values)
-    obs_val  = obs_df['SWY'].values[idx]
-    sim_val  = sim_val[I]
-    obj      = factor_metric * si.Cal_FunObj(obs_val, sim_val, metric_name)
+    obj, obs_val, sim_val = _score_against_obs(
+        si, sim_df, 'mean', obs_df, 'SWY', metric_name, factor_metric)
 
-    sl = user_data['Suffix']
-    _save_eval_csv(workspace, f'SWY_Metric_{sl}.csv',
-                   f'Alpha,Beta,Gamma,Factor-Kc_m,{metric_name}',
-                   [f'{alpha:.3f},{beta:.3f},{gamma:.3f},{kc_m:.2f},{obj:.2f}'])
-    _save_eval_csv(workspace, f'SWY_Obs_{sl}.csv', 'Obs',
-                   [f'{v:.2f}' for v in obs_val])
-    _save_eval_csv(workspace, f'SWY_Sim_{sl}.csv', 'Sim',
-                   [f'{v:.2f}' for v in sim_val])
+    _save_iteration(workspace, 'SWY', user_data['Suffix'],
+                     f'Alpha,Beta,Gamma,Factor-Kc_m,{metric_name}',
+                     f'{alpha:.3f},{beta:.3f},{gamma:.3f},{kc_m:.2f},{obj:.2f}',
+                     obs_val, sim_val)
     return obj
 
+
+# ---------------------------------------------------------------------------
+# SDR calibration iteration
+# ---------------------------------------------------------------------------
 
 def _execute_sdr_direct(workspace, mp, user_data, vector, metric_name, factor_metric, obs_df, si):
     """Run one SDR calibration iteration and score it against observations.
@@ -1023,12 +1132,10 @@ def _execute_sdr_direct(workspace, mp, user_data, vector, metric_name, factor_me
         'L_max': l_max, 'Factor-C': fc, 'Factor-P': fp,
     }
 
-    print(f'SDR  sdr_max={sdr_max:.2f}  K={k_sdr:.2f}  IC0={ic0:.2f}  '
-          f'L_max={l_max:.2f}  C={fc:.5f}  P={fp:.5f}')
+    LOGGER.info(f'SDR  sdr_max={sdr_max:.2f}  K={k_sdr:.2f}  IC0={ic0:.2f}  '
+                f'L_max={l_max:.2f}  C={fc:.5f}  P={fp:.5f}')
 
-    table = si.Factor_BioTable(mp['biophysical_table_path'], params, user_data)
-    tmp_bio = os.path.join(workspace, 'TMP', 'SDR_biophysical.csv')
-    table.to_csv(tmp_bio, index=False)
+    tmp_bio = _write_temp_biotable(si, mp, user_data, params, workspace, 'SDR')
 
     out_dir  = os.path.join(workspace, 'OUTPUTS', '03-SDR')
     suffix   = user_data['Suffix']
@@ -1055,22 +1162,20 @@ def _execute_sdr_direct(workspace, mp, user_data, vector, metric_name, factor_me
 
     dbf_path = os.path.join(out_dir, f'watershed_results_sdr_{suffix}.dbf')
     sim_df   = Dbf5(dbf_path).to_dataframe()
-    sim_val  = sim_df['sed_export'].values
-    [I, idx] = si.ismember(sim_df['ws_id'].values, obs_df['ws_id'].values)
-    obs_val  = obs_df['SDR'].values[idx]
-    sim_val  = sim_val[I]
-    obj      = factor_metric * si.Cal_FunObj(obs_val, sim_val, metric_name)
+    obj, obs_val, sim_val = _score_against_obs(
+        si, sim_df, 'sed_export', obs_df, 'SDR', metric_name, factor_metric)
 
-    sl = user_data['Suffix']
-    _save_eval_csv(workspace, f'SDR_Metric_{sl}.csv',
-                   f'sdr_max,k_param,ic_0_param,l_max,Factor-C,Factor-P,{metric_name}',
-                   [f'{sdr_max:.2f},{k_sdr:.2f},{ic0:.2f},{l_max:.2f},{fc:.5f},{fp:.5f},{obj:.2f}'])
-    _save_eval_csv(workspace, f'SDR_Obs_{sl}.csv', 'Obs',
-                   [f'{v:.2f}' for v in obs_val])
-    _save_eval_csv(workspace, f'SDR_Sim_{sl}.csv', 'Sim',
-                   [f'{v:.2f}' for v in sim_val])
+    _save_iteration(
+        workspace, 'SDR', user_data['Suffix'],
+        f'sdr_max,k_param,ic_0_param,l_max,Factor-C,Factor-P,{metric_name}',
+        f'{sdr_max:.2f},{k_sdr:.2f},{ic0:.2f},{l_max:.2f},{fc:.5f},{fp:.5f},{obj:.2f}',
+        obs_val, sim_val)
     return obj
 
+
+# ---------------------------------------------------------------------------
+# NDR calibration iteration (N or P)
+# ---------------------------------------------------------------------------
 
 def _execute_ndr_direct(workspace, mp, user_data, vector, metric_name, factor_metric, obs_df, si,
                         model_name):
@@ -1117,7 +1222,6 @@ def _execute_ndr_direct(workspace, mp, user_data, vector, metric_name, factor_me
     from natcap.invest.ndr import ndr as _ndr  # noqa: PLC0415
 
     if model_name == 'NDR_N':
-        k_ndr, load_n, eff_n, subcri_n, sub_eff_n = (float(vector[i]) for i in range(5))
         # NDR_N vector order matches _build_spotpy_params:
         # SubCri_Len_N, Sub_Eff_N, Borselli-K_NDR, Factor_Load_N, Factor_Eff_N
         subcri_n, sub_eff_n, k_ndr, load_n, eff_n = (float(vector[i]) for i in range(5))
@@ -1125,8 +1229,8 @@ def _execute_ndr_direct(workspace, mp, user_data, vector, metric_name, factor_me
             'SubCri_Len_N': subcri_n, 'Sub_Eff_N': sub_eff_n,
             'Borselli-K_NDR': k_ndr, 'Factor_Load_N': load_n, 'Factor_Eff_N': eff_n,
         }
-        print(f'NDR_N  SubCri={subcri_n:.2f}  SubEff={sub_eff_n:.2f}  '
-              f'K={k_ndr:.2f}  Load={load_n:.2f}  Eff={eff_n:.2f}')
+        LOGGER.info(f'NDR_N  SubCri={subcri_n:.2f}  SubEff={sub_eff_n:.2f}  '
+                    f'K={k_ndr:.2f}  Load={load_n:.2f}  Eff={eff_n:.2f}')
         ndr_extra = {'calc_n': True, 'calc_p': False,
                      'subsurface_critical_length_n': '%.2f' % subcri_n,
                      'subsurface_eff_n':             '%.2f' % sub_eff_n}
@@ -1138,8 +1242,8 @@ def _execute_ndr_direct(workspace, mp, user_data, vector, metric_name, factor_me
             'SubCri_Len_P': subcri_p, 'Sub_Eff_P': sub_eff_p,
             'Borselli-K_NDR': k_ndr, 'Factor_Load_P': load_p, 'Factor_Eff_P': eff_p,
         }
-        print(f'NDR_P  SubCri={subcri_p:.2f}  SubEff={sub_eff_p:.2f}  '
-              f'K={k_ndr:.2f}  Load={load_p:.2f}  Eff={eff_p:.2f}')
+        LOGGER.info(f'NDR_P  SubCri={subcri_p:.2f}  SubEff={sub_eff_p:.2f}  '
+                    f'K={k_ndr:.2f}  Load={load_p:.2f}  Eff={eff_p:.2f}')
         ndr_extra = {'calc_n': False, 'calc_p': True,
                      'subsurface_critical_length_p': '%.2f' % subcri_p,
                      'subsurface_eff_p':             '%.2f' % sub_eff_p}
@@ -1185,13 +1289,9 @@ def _execute_ndr_direct(workspace, mp, user_data, vector, metric_name, factor_me
     sim_df  = si.calculate_zonal_stats(mp['calibration_watersheds_path'],
                                        raster, os.path.join(workspace, 'TMP'),
                                        Suffix=model_name)
-    sim_val = sim_df[sim_col].values
-    [I, idx] = si.ismember(sim_df['ws_id'].values, obs_df['ws_id'].values)
-    obs_val  = obs_df[obs_col].values[idx]
-    sim_val  = sim_val[I]
-    obj      = factor_metric * si.Cal_FunObj(obs_val, sim_val, metric_name)
+    obj, obs_val, sim_val = _score_against_obs(
+        si, sim_df, sim_col, obs_df, obs_col, metric_name, factor_metric)
 
-    sl = user_data['Suffix']
     if model_name == 'NDR_N':
         hdr   = f'SubCri_Len_N,Sub_Eff_N,Borselli-K,Factor_Load_N,Factor_Eff_N,{metric_name}'
         p_row = f'{subcri_n:.2f},{sub_eff_n:.2f},{k_ndr:.2f},{load_n:.2f},{eff_n:.2f},{obj:.2f}'
@@ -1199,11 +1299,7 @@ def _execute_ndr_direct(workspace, mp, user_data, vector, metric_name, factor_me
         hdr   = f'SubCri_Len_P,Sub_Eff_P,Borselli-K,Factor_Load_P,Factor_Eff_P,{metric_name}'
         p_row = f'{subcri_p:.2f},{sub_eff_p:.2f},{k_ndr:.2f},{load_p:.2f},{eff_p:.2f},{obj:.2f}'
 
-    _save_eval_csv(workspace, f'{model_name}_Metric_{sl}.csv', hdr, [p_row])
-    _save_eval_csv(workspace, f'{model_name}_Obs_{sl}.csv', 'Obs',
-                   [f'{v:.2f}' for v in obs_val])
-    _save_eval_csv(workspace, f'{model_name}_Sim_{sl}.csv', 'Sim',
-                   [f'{v:.2f}' for v in sim_val])
+    _save_iteration(workspace, model_name, user_data['Suffix'], hdr, p_row, obs_val, sim_val)
     return obj
 
 

@@ -26,13 +26,13 @@
 # ----------------------------------------------------------------------------------------------------------------------
 # Package
 # ----------------------------------------------------------------------------------------------------------------------
-import os, sys
+import os
 import spotpy
 import numpy as np
 import pandas as pd
 import geopandas as gpd
 from osgeo import gdal, ogr
-from osgeo.gdalconst import *
+from osgeo.gdalconst import GA_ReadOnly
 import rasterio
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
@@ -46,6 +46,10 @@ rcParams['axes.unicode_minus'] = False
 from rasterstats import zonal_stats
 
 gdal.PushErrorHandler('CPLQuietErrorHandler')
+
+# --------------------------------------------------------------------------
+# Folder utilities
+# --------------------------------------------------------------------------
 
 def CreateFolder(dir):
     """Create a directory (and any missing parents), ignoring if it exists.
@@ -64,6 +68,11 @@ def CreateFolder(dir):
     except FileExistsError:
         # Directory already exists — nothing to do.
         pass
+
+
+# --------------------------------------------------------------------------
+# Biophysical table factor application
+# --------------------------------------------------------------------------
 
 def Factor_BioTable(PathBioTable, Params, UserData):
     """Apply calibration factors to the biophysical table for one model.
@@ -151,6 +160,11 @@ def Factor_BioTable(PathBioTable, Params, UserData):
     #    print('')
 
     return Table
+
+
+# --------------------------------------------------------------------------
+# Objective function calculation
+# --------------------------------------------------------------------------
 
 def Cal_FunObj(Obs, Sim, NameFunObj):
     """Compute the calibration objective function value.
@@ -544,18 +558,13 @@ def _compute(a_vec, b_vec):
     return bool_ind, common_ind[common_inv]
 
 
-"""
-Zonal Statistics
-Vector-Raster Analysis
-Copyright 2013 Matthew Perry
-Usage:
-  zonal_stats.py VECTOR RASTER
-  zonal_stats.py -h | --help
-  zonal_stats.py --version
-Options:
-  -h --help     Show this screen.
-  --version     Show version.
-"""
+# --------------------------------------------------------------------------
+# Zonal statistics (GDAL-based)
+# Name        : zonal_stats.py
+# Author      : Matthew Perry
+# Copyright   : 2013
+# --------------------------------------------------------------------------
+
 def bbox_to_pixel_offsets(gt, bbox):
     """Convert a geographic bounding box into raster pixel offsets/size.
 
@@ -624,7 +633,9 @@ def zonal_stats_1(vector_path, raster_path, nodata_value=None, global_src_extent
         nodata_value = float(nodata_value)
         rb.SetNoDataValue(nodata_value)
 
-    vds = ogr.Open(vector_path, GA_ReadOnly)  # TODO maybe open update if we want to write stats
+    # Opened read-only: this function only reads stats, it never writes
+    # them back to the vector layer.
+    vds = ogr.Open(vector_path, GA_ReadOnly)
     assert(vds)
     vlyr = vds.GetLayer(0)
 
@@ -715,7 +726,10 @@ def zonal_stats_1(vector_path, raster_path, nodata_value=None, global_src_extent
     rds = None
     return stats
 
-import pyogrio
+
+# --------------------------------------------------------------------------
+# Zonal statistics (rasterstats-based)
+# --------------------------------------------------------------------------
 
 def calculate_zonal_stats(shapefile_path, raster_path, output_path_shp, ws_id="ws_id", Suffix=""):
     """Compute per-watershed zonal statistics of a raster (rasterstats-based).
@@ -765,28 +779,22 @@ def calculate_zonal_stats(shapefile_path, raster_path, output_path_shp, ws_id="w
     if polygons.crs != raster_crs:
         polygons = polygons.to_crs(raster_crs)
 
-    # Compute zonal statistics grouped by the 'ws_id' attribute.
-    unique_ids = polygons[ws_id].unique()
-    results = []
-
-    for uid in unique_ids:
-        subset = polygons[polygons[ws_id] == uid]
-        stats = zonal_stats(
-            subset,  # Shapefile subset
-            raster_path,  # Raster file
-            stats=["mean", "min", "max", "median","sum"],
-            nodata=nodata_value,  # Desired statistics
-            geojson_out=True  # Return results as GeoJSON
-        )
-        stats_gdf = gpd.GeoDataFrame.from_features(stats)
-        stats_gdf[ws_id] = uid
-        results.append(stats_gdf)
-
-    # Combine all results.
-    final_result = gpd.GeoDataFrame(pd.concat(results, ignore_index=True))
+    # Compute zonal statistics for all polygons in a single vectorized
+    # call. rasterstats scores each feature independently regardless of
+    # its 'ws_id', so looping per unique id and concatenating produced
+    # the same rows, just slower for many watersheds.
+    stats = zonal_stats(
+        polygons,  # Full polygon layer
+        raster_path,  # Raster file
+        stats=["mean", "min", "max", "median", "sum"],
+        nodata=nodata_value,  # Desired statistics
+        geojson_out=True  # Return results as GeoJSON
+    )
+    final_result = gpd.GeoDataFrame.from_features(stats)
+    final_result[ws_id] = polygons[ws_id].values
 
     # Save results to a new shapefile.
-    output_path = "Zonal_{}.shp".format(Suffix)
+    output_path = f"Zonal_{Suffix}.shp"
     try:
         final_result.to_file(os.path.join(output_path_shp, output_path), driver='ESRI Shapefile')
     except Exception as e:
