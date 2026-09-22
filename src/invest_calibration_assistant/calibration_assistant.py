@@ -3,9 +3,8 @@
 InVEST Calibration Assistant - InVEST Plugin
 
 Nature For Water Facility - The Nature Conservancy
-Author  : Jonathan Nogales Pimentel / Miguel Angel Cañon
+Author  : Jonathan Nogales Pimentel / Carlos Andrés Rogéliz Prada / Miguel Angel Cañón
 Email   : jonathan.nogales@tnc.org
-Date    : 2025
 
 Per-model individual field inputs replace the legacy "Table Of Input File Names"
 CSV. Fields appear/disappear dynamically based on the selected model:
@@ -19,6 +18,21 @@ CSV. Fields appear/disappear dynamically based on the selected model:
 
 The "Table Of Parameter Search Ranges" CSV and "Table Of Observed Data" CSV
 remain unchanged.
+"""
+
+"""
+Development History
+--------------------
+Core calibration methodology originated in 2021 (WaterProof project,
+InVEST 3.9), conceived by Jonathan Nogales Pimentel and Carlos
+Andres Rogeliz Prada, and coded by Jonathan Nogales Pimentel. Published
+in Rogeliz et al. (2022), Water 14(21):3447
+(https://doi.org/10.3390/w14213447). Rebuilt as a standalone
+calibration tool in 2024-2025 by Jonathan Nogales Pimentel. Adapted
+to the InVEST plugin standard in 2026 by Miguel Angel Canon Ramos.
+
+Full history, contributor roles, and a note on git-blame attribution
+for the pre-2026 codebase: see CONTRIBUTING.md.
 """
 
 import logging

@@ -2,31 +2,24 @@
 # -------------------------------------------------------------------------
 # Nature For Water Facility - The Nature Conservancy
 # -------------------------------------------------------------------------
-# InVEST - Version 3.15.1 (update July 2025)
-# -------------------------------------------------------------------------
 #                           BASIC INFORMATION
 # -------------------------------------------------------------------------
-# Author        : Jonathan Nogales Pimentel
+# Author        : Jonathan Nogales Pimentel / Carlos Andrés Rogéliz Prada / Miguel Angel Cañón
 # Email         : jonathan.nogales@tnc.org
-# Date          : October, 2024
 #
 # -------------------------------------------------------------------------
-# This program is free software: you can redistribute it and/or modify it
-# under the terms of the GNU General Public License as published by the
-# Free Software Foundation, either version 3 of the License, or option) any
-# later version. This program is distributed in the hope that it will be
-# useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-# ee the GNU General Public License for more details. You should have
-# received a copy of the GNU General Public License along with this program.
-# If not, see http://www.gnu.org/licenses/.
+#                        DEVELOPMENT HISTORY
 # -------------------------------------------------------------------------
-#                            DESCRIPTION
-# -------------------------------------------------------------------------
-# This code allow
-
-# -------------------------------------------------------------------------
-#                             REFERENCES
+# Core calibration methodology originated in 2021 (WaterProof project,
+# InVEST 3.9), conceived by Jonathan Nogales Pimentel and Carlos
+# Andres Rogeliz Prada, and coded by Jonathan Nogales Pimentel. Published
+# in Rogeliz et al. (2022), Water 14(21):3447
+# (https://doi.org/10.3390/w14213447). Rebuilt as a standalone
+# calibration tool in 2024-2025 by Jonathan Nogales Pimentel. Adapted
+# to the InVEST plugin standard in 2026 by Miguel Angel Canon Ramos.
+#
+# Full history, contributor roles, and a note on git-blame attribution
+# for the pre-2026 codebase: see CONTRIBUTING.md.
 # -------------------------------------------------------------------------
 
 
