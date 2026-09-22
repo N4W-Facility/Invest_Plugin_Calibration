@@ -105,6 +105,9 @@ def Factor_BioTable(PathBioTable, Params, UserData):
 
     # Annual Water Yield
     if UserData['Status_AWY']:
+        # Force float dtype: an all-integer column (e.g. Kc == 1 for every
+        # row) would otherwise reject the scaled float values below.
+        Table['Kc'] = Table['Kc'].astype(float)
         # Scale the Kc column by the calibration factor and round to 2 decimals.
         Values = round(Table['Kc'] * Params['Factor-Kc'], 2)
         # Cap Kc at 1.2 (physical upper bound).
@@ -116,14 +119,20 @@ def Factor_BioTable(PathBioTable, Params, UserData):
     if UserData['Status_SWY']:
         # Scale each monthly Kc_<month> column by the calibration factor.
         for ij in range(1, 13):
-            Values = round(Table['Kc_' + str(ij)] * round(Params['Factor-Kc_m'], 2), 2)
+            col = 'Kc_' + str(ij)
+            # Force float dtype; see the AWY block above for why.
+            Table[col] = Table[col].astype(float)
+            Values = round(Table[col] * round(Params['Factor-Kc_m'], 2), 2)
             # Cap Kc at 1.2 (physical upper bound).
             Values[Values >= 1.2] = 1.2
             # Write the scaled Kc back only for rows flagged as calibratable.
-            Table.loc[Table['Status_Cal_Kc'] == 1, 'Kc_' + str(ij)] = Values.loc[Table['Status_Cal_Kc'] == 1]
+            Table.loc[Table['Status_Cal_Kc'] == 1, col] = Values.loc[Table['Status_Cal_Kc'] == 1]
 
     # Sediment Delivery Ratio
     if UserData['Status_SDR'] == 1:
+        # Force float dtype; see the AWY block above for why.
+        Table['usle_c'] = Table['usle_c'].astype(float)
+        Table['usle_p'] = Table['usle_p'].astype(float)
         # Scale the USLE cover factor (C) and round to 5 decimals.
         Values = round(Table['usle_c'] * round(Params['Factor-C'], 2), 5)
         # Cap C at 1 (physical upper bound).
@@ -140,6 +149,9 @@ def Factor_BioTable(PathBioTable, Params, UserData):
 
     # Nutrient Delivery Ratio (nitrogen)
     if (UserData['Status_NDR_N'] == 1):
+        # Force float dtype; see the AWY block above for why.
+        Table['load_n'] = Table['load_n'].astype(float)
+        Table['eff_n'] = Table['eff_n'].astype(float)
         Values = round(Table['load_n'] * Params['Factor_Load_N'], 3)
         Table.loc[Table['Status_Cal_Load_N'] == 1, 'load_n'] = Values.loc[Table['Status_Cal_Load_N'] == 1]
 
@@ -148,6 +160,9 @@ def Factor_BioTable(PathBioTable, Params, UserData):
 
     # Nutrient Delivery Ratio (phosphorus)
     if (UserData['Status_NDR_P'] == 1):
+        # Force float dtype; see the AWY block above for why.
+        Table['load_p'] = Table['load_p'].astype(float)
+        Table['eff_p'] = Table['eff_p'].astype(float)
         Values = round(Table['load_p'] * Params['Factor_Load_P'], 3)
         Table.loc[Table['Status_Cal_Load_P'] == 1, 'load_p'] = Values.loc[Table['Status_Cal_Load_P'] == 1]
 
