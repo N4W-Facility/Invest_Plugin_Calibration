@@ -423,23 +423,23 @@ def _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, ModelName):
 
     return BestParamsDict, BestAREM
 
-def Plot_AWY(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
+def Plot_AWY(ProjectPath, Suffix, NameMetric, FactorMetric):
     """Build the AWY calibration figure. See :func:`_plot_calibration`."""
     return _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, 'AWY')
 
-def Plot_SWY(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
+def Plot_SWY(ProjectPath, Suffix, NameMetric, FactorMetric):
     """Build the SWY calibration figure. See :func:`_plot_calibration`."""
     return _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, 'SWY')
 
-def Plot_SDR(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
+def Plot_SDR(ProjectPath, Suffix, NameMetric, FactorMetric):
     """Build the SDR calibration figure. See :func:`_plot_calibration`."""
     return _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, 'SDR')
 
-def Plot_NDR_N(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
+def Plot_NDR_N(ProjectPath, Suffix, NameMetric, FactorMetric):
     """Build the NDR_N calibration figure. See :func:`_plot_calibration`."""
     return _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, 'NDR_N')
 
-def Plot_NDR_P(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
+def Plot_NDR_P(ProjectPath, Suffix, NameMetric, FactorMetric):
     """Build the NDR_P calibration figure. See :func:`_plot_calibration`."""
     return _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, 'NDR_P')
 
