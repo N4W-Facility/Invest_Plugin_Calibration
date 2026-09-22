@@ -43,12 +43,13 @@ from osgeo.gdalconst import *
 import rasterio
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
-# Cambiar a Times New Roman para texto y matemáticas
-rcParams['font.family'] = 'Times New Roman'
-rcParams['mathtext.fontset'] = 'custom'
-rcParams['mathtext.rm'] = 'Times New Roman'
-rcParams['mathtext.it'] = 'Times New Roman:italic'
-rcParams['mathtext.bf'] = 'Times New Roman:bold'
+from matplotlib.lines import Line2D
+# Tipografía tipo LaTeX (Computer Modern) para texto y matemáticas, sin
+# depender de una instalación de TeX ni de fuentes externas al sistema.
+rcParams['font.family'] = 'serif'
+rcParams['font.serif']  = ['cmr10', 'DejaVu Serif']
+rcParams['mathtext.fontset'] = 'cm'
+rcParams['axes.unicode_minus'] = False
 from rasterstats import zonal_stats
 
 gdal.PushErrorHandler('CPLQuietErrorHandler')
@@ -142,28 +143,114 @@ def Cal_FunObj(Obs, Sim, NameFunObj):
     elif NameFunObj == "Relative Root Mean Squared Error (RRMSE)":
         return spotpy.objectivefunctions.rrmse(Obs, Sim)
 
-def Plot_AWY(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
+# --------------------------------------------------------------------------
+# Calibration plots
+# --------------------------------------------------------------------------
+# Shared visual style for all calibration figures:
+#   - Dotty plots: light gray points with a darker gray edge (clean/modern look).
+#   - Best-fit parameter: highlighted in wine red.
+_DOT_FACE   = '#D9D9D9'   # light gray fill
+_DOT_EDGE   = '#8C8C8C'   # darker gray edge
+_BEST_COLOR = '#7B1E24'   # wine red (vinotinto)
+_REF_COLOR  = [0.8, 0.8, 0.8]
+
+def _style_axis(ax, fontsize=16):
+    """Clean, modern panel style shared by every calibration plot."""
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_color('#595959')
+    ax.spines['bottom'].set_color('#595959')
+    ax.grid(True, linestyle=':', linewidth=0.7, color='#BFBFBF', alpha=0.6)
+    ax.set_axisbelow(True)
+    ax.tick_params(labelsize=fontsize - 3, colors='#404040')
+
+# Per-model plot configuration: unit label, time conversion factor (only AWY
+# reports Obs/Sim/Metric in per-second and needs converting to per-year),
+# and the (result key, axis label) pairs in the same column order used by
+# each model's EVALUATIONS/*_Metric_{Suffix}.csv file.
+_MODEL_PLOT_CONFIG = {
+    'AWY': {
+        'unit': r'$(\mathrm{m}^3/\mathrm{s})$',
+        'time_scale': 1 / (3600 * 24 * 365),
+        'params': [
+            ('Z', r'$Z$'),
+            ('Factor-Kc', r'Factor$_{K_c}$'),
+        ],
+    },
+    'SWY': {
+        'unit': r'$(mm)$',
+        'time_scale': 1,
+        'params': [
+            ('Alpha', r'$\alpha$'),
+            ('Beta', r'$\beta$'),
+            ('Gamma', r'$\gamma$'),
+            ('Factor-Kc_m', r'Factor$_{K_c}$'),
+        ],
+    },
+    'SDR': {
+        'unit': r'$(ton/year)$',
+        'time_scale': 1,
+        'params': [
+            ('sdr_max', r'SDR$_{max}$'),
+            ('Borselli-K_SDR', r'$K$'),
+            ('IC0', r'IC$_{0}$'),
+            ('L_max', r'L$_{max}$'),
+            ('Factor-C', r'Factor$_{C}$'),
+            ('Factor-P', r'Factor$_{P}$'),
+        ],
+    },
+    'NDR_N': {
+        'unit': r'$(kg/year)$',
+        'time_scale': 1,
+        'params': [
+            ('SubCri_Len_N', r'SubCri$_{Len_N}$'),
+            ('Sub_Eff_N', r'Sub$_{Eff_N}$'),
+            ('Borselli-K_NDR', r'Borselli$_{K}$'),
+            ('Factor_Load_N', r'Factor$_{Load_N}$'),
+            ('Factor_Eff_N', r'Factor$_{Eff_N}$'),
+        ],
+    },
+    'NDR_P': {
+        'unit': r'$(kg/year)$',
+        'time_scale': 1,
+        'params': [
+            ('SubCri_Len_P', r'SubCri$_{Len_P}$'),
+            ('Sub_Eff_P', r'Sub$_{Eff_P}$'),
+            ('Borselli-K_NDR', r'Borselli$_{K}$'),
+            ('Factor_Load_P', r'Factor$_{Load_P}$'),
+            ('Factor_Eff_P', r'Factor$_{Eff_P}$'),
+        ],
+    },
+}
+
+def _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, ModelName):
+
+    cfg         = _MODEL_PLOT_CONFIG[ModelName]
+    unit        = cfg['unit']
+    time_scale  = cfg['time_scale']
+    param_keys, param_labels = zip(*cfg['params'])
+    n_params    = len(param_keys)
 
     # Metric and parameters
-    FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'AWY_Metric_{Suffix}.csv')
+    FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'{ModelName}_Metric_{Suffix}.csv')
     Tmp         = np.loadtxt(FileName, delimiter=',', skiprows=1)
-    Params      = Tmp[:, :2]
-    Metric      = Tmp[:, 2] / (3600 * 24 * 365)
+    Params      = Tmp[:, :n_params]
+    Metric      = Tmp[:, n_params] * time_scale
 
     # Observed
-    FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'AWY_Obs_{Suffix}.csv')
+    FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'{ModelName}_Obs_{Suffix}.csv')
     Obs         = np.loadtxt(FileName, delimiter=',', skiprows=1)
     NGauges     = len(Obs) // len(Metric)
-    Obs         = Obs.reshape(len(Metric),NGauges)
+    Obs         = Obs.reshape(len(Metric), NGauges)
     Obs         = Obs.transpose()
-    Obs         = Obs[:, 0] / (3600 * 24 * 365)
-    Obs         = Obs.reshape(NGauges,1)
+    Obs         = Obs[:, 0] * time_scale
+    Obs         = Obs.reshape(NGauges, 1)
 
     # Simulation
-    FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'AWY_Sim_{Suffix}.csv')
+    FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'{ModelName}_Sim_{Suffix}.csv')
     Sim         = np.loadtxt(FileName, delimiter=',', skiprows=1)
-    Sim         = Sim.reshape(len(Metric),len(Sim) // len(Metric))
-    Sim         = Sim.transpose() / (3600 * 24 * 365)
+    Sim         = Sim.reshape(len(Metric), len(Sim) // len(Metric))
+    Sim         = Sim.transpose() * time_scale
 
     # Best Parameters
     # Metric ya viene con FactorMetric aplicado (FactorMetric*RMSE), por lo que
@@ -172,429 +259,77 @@ def Plot_AWY(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
     # (SCE-UA/LHS).
     id_min          = np.argmin(FactorMetric * Metric)
     BestParams      = Params[id_min, :]
-    BestParamsDict  = dict(zip(['Z', 'Factor-Kc'], BestParams))
-    BestAREM    = FactorMetric*Metric[id_min]
-    Metric      = FactorMetric*Metric
+    BestParamsDict  = dict(zip(param_keys, BestParams))
+    BestAREM        = FactorMetric * Metric[id_min]
+    Metric          = FactorMetric * Metric
 
-    # Scatter Plot
-    fig, axes = plt.subplots(1, 3, figsize=(16, 5))
+    # Grid sized to the exact number of panels needed (1 Obs-vs-Sim + 1 per
+    # parameter), so no plot ever has empty/unused axes.
+    n_axes = 1 + n_params
+    n_cols = 3 if n_axes <= 6 else 4
+    n_rows = -(-n_axes // n_cols)  # ceil division
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4.5 * n_rows))
+    axes = np.array(axes).reshape(-1)
+    for extra_ax in axes[n_axes:]:
+        fig.delaxes(extra_ax)
 
-    # Plot Obs Vs Sim
+    # Obs vs Sim
     ax = axes[0]
     max_val = max(np.max(Obs), np.max(Sim[:, id_min])) * 1.1
-    ax.plot([0, max_val], [0, max_val], linewidth=1.2, color=[0.8, 0.8, 0.8])
-    ax.scatter(Obs, Sim[:, id_min], s=100, edgecolor=[0, 0.5, 0.5], facecolor=[0, 0.7, 0.7],alpha=0.2, linewidth=1.2)
-    ax.set_xlabel(r'Observed $(\mathrm{m}^3/\mathrm{s})$', fontsize=16)
-    ax.set_ylabel(r'Simulated $(\mathrm{m}^3/\mathrm{s})$', fontsize=16)
-    ax.set_title(f'{NameMetric}' + ' = ' + str(round(BestAREM, 2)) + r' $(\mathrm{m}^3/\mathrm{s})$', fontsize=16)
+    ax.plot([0, max_val], [0, max_val], linewidth=1.2, color=_REF_COLOR, zorder=1)
+    ax.scatter(Obs, Sim[:, id_min], s=100, edgecolor=_DOT_EDGE, facecolor=_DOT_FACE, alpha=0.9, linewidth=1.2, zorder=2)
+    ax.set_xlabel(f'Observed {unit}', fontsize=16)
+    ax.set_ylabel(f'Simulated {unit}', fontsize=16)
+    ax.set_title(f'{NameMetric} = {round(BestAREM, 2)} {unit}', fontsize=16, pad=10)
+    _style_axis(ax)
 
-    # Plot Dotty Z-Params
-    ax = axes[1]
-    ax.scatter(Params[:, 0], Metric, s=30, color=[1, 0.656, 0], alpha=0.2)
-    ax.scatter(BestParams[0], BestAREM, s=50, color=[1, 0, 0])
-    ax.set_xlabel(r'$Z$', fontsize=16)
-    ax.set_ylabel(f'{NameMetric}' + r' $(\mathrm{m}^3/\mathrm{s})$', fontsize=16)
-    ax.set_title(r'$Z = ' + str(BestParams[0]) + r'$', fontsize=16)
+    # Dotty plots, one per calibrated parameter
+    for i, label in enumerate(param_labels):
+        ax = axes[1 + i]
+        ax.scatter(Params[:, i], Metric, s=30, edgecolor=_DOT_EDGE, facecolor=_DOT_FACE, alpha=0.6, linewidth=0.8, zorder=2)
+        ax.scatter(BestParams[i], BestAREM, s=60, color=_BEST_COLOR, edgecolor='black', linewidth=0.6, zorder=3)
+        ax.set_xlabel(label, fontsize=16)
+        ax.set_ylabel(f'{NameMetric} {unit}', fontsize=16)
+        ax.set_title(f'{label} = {BestParams[i]:.4g}', fontsize=16, pad=10)
+        _style_axis(ax)
 
-    # Plot Dotty Factor-Kc
-    ax = axes[2]
-    ax.scatter(Params[:, 1], Metric, s=30, color=[0.969, 0, 1], alpha=0.2)
-    ax.scatter(BestParams[1], BestAREM, s=50, color=[1, 0, 0])
-    ax.set_xlabel(r'Factor$_{K_c}$', fontsize=16)
-    ax.set_ylabel(f'{NameMetric}' + r' $(\mathrm{m}^3/\mathrm{s})$', fontsize=16)
-    ax.set_title(r'Factor$_{K_c}$ = ' + str(BestParams[1]), fontsize=16)
+    fig.patch.set_facecolor('white')
+
+    # Legend clarifying what the wine-red marker means (avoids any ambiguity
+    # about which point is the best-fit parameter set).
+    legend_handles = [
+        Line2D([0], [0], marker='o', linestyle='', markersize=9,
+               markerfacecolor=_DOT_FACE, markeredgecolor=_DOT_EDGE, label='Simulations'),
+        Line2D([0], [0], marker='o', linestyle='', markersize=9,
+               markerfacecolor=_BEST_COLOR, markeredgecolor='black', label='Best fit'),
+    ]
+    fig.legend(handles=legend_handles, loc='lower center', ncol=2, frameon=False,
+               fontsize=14, bbox_to_anchor=(0.5, -0.05))
 
     # Save Figure
-    FileName = os.path.join(ProjectPath, 'FIGURES', f'Calibration_AWY_{Suffix}.jpg')
-    plt.tight_layout()
-    plt.savefig(FileName)
+    # rect reserves the bottom margin for the legend so it doesn't crowd the
+    # x-axis titles of the last row of panels.
+    FileName = os.path.join(ProjectPath, 'FIGURES', f'Calibration_{ModelName}_{Suffix}.jpg')
+    plt.tight_layout(rect=[0, 0.045, 1, 1])
+    plt.savefig(FileName, dpi=200, facecolor='white', bbox_inches='tight')
     plt.close()
 
     return BestParamsDict
+
+def Plot_AWY(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
+    return _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, 'AWY')
 
 def Plot_SWY(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
-
-    # Metric and parameters
-    FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'SWY_Metric_{Suffix}.csv')
-    Tmp         = np.loadtxt(FileName, delimiter=',', skiprows=1)
-    Params      = Tmp[:, :4]
-    Metric      = Tmp[:, 4]
-
-    # Observed
-    FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'SWY_Obs_{Suffix}.csv')
-    Obs         = np.loadtxt(FileName, delimiter=',', skiprows=1)
-    NGauges     = len(Obs) // len(Metric)
-    Obs         = Obs.reshape(len(Metric),NGauges)
-    Obs         = Obs.transpose()
-    Obs         = Obs[:, 0]
-    Obs         = Obs.reshape(NGauges,1)
-
-    # Simulation
-    FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'SWY_Sim_{Suffix}.csv')
-    Sim         = np.loadtxt(FileName, delimiter=',', skiprows=1)
-    Sim         = Sim.reshape(len(Metric),len(Sim) // len(Metric))
-    Sim         = Sim.transpose()
-
-    # Best Parameters
-    # Metric ya viene con FactorMetric aplicado (FactorMetric*RMSE), por lo que
-    # volver a multiplicar por FactorMetric antes de comparar recupera el RMSE
-    # real, sin importar si el algoritmo internamente maximiza (DDS) o minimiza
-    # (SCE-UA/LHS).
-    id_min          = np.argmin(FactorMetric * Metric)
-    BestParams      = Params[id_min, :]
-    BestParamsDict  = dict(zip(['Alpha', 'Beta', 'Gamma', 'Factor-Kc_m'], BestParams))
-    BestAREM    = FactorMetric * Metric[id_min]
-    Metric      = FactorMetric * Metric
-
-    # Scatter Plot
-    fig, axes = plt.subplots(2, 3, figsize=(16, 10))
-
-    # Plot Obs Vs Sim
-    ax = axes[0,0]
-    max_val = max(np.max(Obs), np.max(Sim[:, id_min])) * 1.1
-    ax.plot([0, max_val], [0, max_val], linewidth=1.2, color=[0.8, 0.8, 0.8])
-    ax.scatter(Obs, Sim[:, id_min], s=100, edgecolor=[0, 0.5, 0.5], facecolor=[0, 0.7, 0.7],alpha=0.2, linewidth=1.2)
-    ax.set_xlabel(r'Observed $(mm)$', fontsize=16)
-    ax.set_ylabel(r'Simulated $(mm)$', fontsize=16)
-    ax.set_title(f'{NameMetric}' + ' = ' + str(round(BestAREM, 2)) + r' $(mm)$', fontsize=16)
-
-    # Plot Dotty Z-Params
-    ax = axes[0,1]
-    ax.scatter(Params[:, 0], Metric, s=30, color=[1, 0.656, 0], alpha=0.2)
-    ax.scatter(BestParams[0], BestAREM, s=50, color=[1, 0, 0])
-    ax.set_xlabel(r'\alpha', fontsize=16)
-    ax.set_ylabel(f'{NameMetric}' + r' $(mm)$', fontsize=16)
-    ax.set_title(r'\alpha = ' + str(BestParams[0]), fontsize=16)
-
-    # Plot Dotty Factor-Kc
-    ax = axes[0,2]
-    ax.scatter(Params[:, 1], Metric, s=30, color=[0.969, 0, 1], alpha=0.2)
-    ax.scatter(BestParams[1], BestAREM, s=50, color=[1, 0, 0])
-    ax.set_xlabel(r'$\beta$', fontsize=16)
-    ax.set_ylabel(f'{NameMetric}' + r' $(mm)$', fontsize=16)
-    ax.set_title(r'$\beta$ = ' + str(BestParams[1]), fontsize=16)
-
-    # Plot Dotty Factor-Kc
-    ax = axes[1,0]
-    ax.scatter(Params[:, 2], Metric, s=30, color=[0.6, 0.6, 0.6], alpha=0.2)
-    ax.scatter(BestParams[2], BestAREM, s=50, color=[1, 0, 0])
-    ax.set_xlabel(r'$\gamma$', fontsize=16)
-    ax.set_ylabel(f'{NameMetric}' + r' $(mm)$', fontsize=16)
-    ax.set_title(r'$\gamma$ = ' + str(BestParams[2]), fontsize=16)
-
-    # Plot Dotty Factor-Kc
-    ax = axes[1,1]
-    ax.scatter(Params[:, 3], Metric, s=30, color=[0, 0.5, 0.5], alpha=0.2)
-    ax.scatter(BestParams[3], BestAREM, s=50, color=[1, 0, 0])
-    ax.set_xlabel(r'Factor$_{K_c}$', fontsize=16)
-    ax.set_ylabel(f'{NameMetric}' + r' $(mm)$', fontsize=16)
-    ax.set_title(r'Factor$_{K_c}$ = ' + str(BestParams[3]), fontsize=16)
-
-    # Save Figure
-    FileName = os.path.join(ProjectPath, 'FIGURES', f'Calibration_SWY_{Suffix}.jpg')
-    plt.tight_layout()
-    plt.savefig(FileName)
-    plt.close()
-
-    return BestParamsDict
+    return _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, 'SWY')
 
 def Plot_SDR(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
-
-    # Metric and parameters
-    FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'SDR_Metric_{Suffix}.csv')
-    Tmp         = np.loadtxt(FileName, delimiter=',', skiprows=1)
-    Params      = Tmp[:, :6]
-    Metric      = Tmp[:, 6]
-
-    # Observed
-    FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'SDR_Obs_{Suffix}.csv')
-    Obs         = np.loadtxt(FileName, delimiter=',', skiprows=1)
-    NGauges     = len(Obs) // len(Metric)
-    Obs         = Obs.reshape(len(Metric),NGauges)
-    Obs         = Obs.transpose()
-    Obs         = Obs[:, 0]
-    Obs         = Obs.reshape(NGauges,1)
-
-    # Simulation
-    FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'SDR_Sim_{Suffix}.csv')
-    Sim         = np.loadtxt(FileName, delimiter=',', skiprows=1)
-    Sim         = Sim.reshape(len(Metric),len(Sim) // len(Metric))
-    Sim         = Sim.transpose()
-
-    # Best Parameters
-    # Metric ya viene con FactorMetric aplicado (FactorMetric*RMSE), por lo que
-    # volver a multiplicar por FactorMetric antes de comparar recupera el RMSE
-    # real, sin importar si el algoritmo internamente maximiza (DDS) o minimiza
-    # (SCE-UA/LHS).
-    id_min          = np.argmin(FactorMetric * Metric)
-    BestParams      = Params[id_min, :]
-    # Orden de columnas tal como se escribe en SDR_Metric_{Suffix}.csv:
-    # sdr_max, k_param, ic_0_param, l_max, Factor-C, Factor-P
-    BestParamsDict  = dict(zip(
-        ['sdr_max', 'Borselli-K_SDR', 'IC0', 'L_max', 'Factor-C', 'Factor-P'],
-        BestParams))
-    BestAREM    = FactorMetric * Metric[id_min]
-    Metric      = FactorMetric * Metric
-
-    # Scatter Plot
-    fig, axes = plt.subplots(2, 4, figsize=(16, 10))
-
-    # Plot Obs Vs Sim
-    ax = axes[0,0]
-    max_val = max(np.max(Obs), np.max(Sim[:, id_min])) * 1.1
-    ax.plot([0, max_val], [0, max_val], linewidth=1.2, color=[0.8, 0.8, 0.8])
-    ax.scatter(Obs, Sim[:, id_min], s=100, edgecolor=[0, 0.5, 0.5], facecolor=[0, 0.7, 0.7],alpha=0.2, linewidth=1.2)
-    ax.set_xlabel(r'Observed $(ton/year)$', fontsize=16)
-    ax.set_ylabel(r'Simulated $(ton/year)$', fontsize=16)
-    ax.set_title(f'{NameMetric}' + ' = ' + str(round(BestAREM, 2)) + r' $(ton/year)$', fontsize=16)
-
-    # Plot Dotty Z-Params
-    ax = axes[0,1]
-    ax.scatter(Params[:, 0], Metric, s=30, color=[1, 0.656, 0], alpha=0.2)
-    ax.scatter(BestParams[0], BestAREM, s=50, color=[1, 0, 0])
-    ax.set_xlabel(r'SDR$_{max}$', fontsize=16)
-    ax.set_ylabel(f'{NameMetric}' + r' $(ton/year)$', fontsize=16)
-    ax.set_title(r'SDR$_{max}$ = ' + str(BestParams[0]), fontsize=16)
-
-    # Plot Dotty Factor-Kc
-    ax = axes[0,2]
-    ax.scatter(Params[:, 1], Metric, s=30, color=[0.969, 0, 1], alpha=0.2)
-    ax.scatter(BestParams[1], BestAREM, s=50, color=[1, 0, 0])
-    ax.set_xlabel(r'$K$', fontsize=16)
-    ax.set_ylabel(f'{NameMetric}' + r' $(ton/year)$', fontsize=16)
-    ax.set_title(r'$K$ = ' + str(BestParams[1]), fontsize=16)
-
-    # Plot Dotty Factor-Kc
-    ax = axes[0,3]
-    ax.scatter(Params[:, 2], Metric, s=30, color=[0.6, 0.6, 0.6], alpha=0.2)
-    ax.scatter(BestParams[2], BestAREM, s=50, color=[1, 0, 0])
-    ax.set_xlabel(r'IC$_{0}$', fontsize=16)
-    ax.set_ylabel(f'{NameMetric}' + r' $(ton/year)$', fontsize=16)
-    ax.set_title(r'IC$_{0}$ = ' + str(BestParams[2]), fontsize=16)
-
-    # Plot Dotty Factor-Kc
-    ax = axes[1,0]
-    ax.scatter(Params[:, 3], Metric, s=30, color=[0, 0.5, 0.5], alpha=0.2)
-    ax.scatter(BestParams[3], BestAREM, s=50, color=[1, 0, 0])
-    ax.set_xlabel(r'L$_{max}$', fontsize=16)
-    ax.set_ylabel(f'{NameMetric}' + r' $(ton/year)$', fontsize=16)
-    ax.set_title(r'L$_{max}$ = ' + str(BestParams[3]), fontsize=16)
-
-    # Plot Dotty Factor-C
-    ax = axes[1,1]
-    ax.scatter(Params[:, 4], Metric, s=30, color=[0, 0.5, 0.5], alpha=0.2)
-    ax.scatter(BestParams[4], BestAREM, s=50, color=[1, 0, 0])
-    ax.set_xlabel(r'Factor$_{C}$', fontsize=16)
-    ax.set_ylabel(f'{NameMetric}' + r' $(ton/year)$', fontsize=16)
-    ax.set_title(r'Factor$_{C}$ = ' + str(BestParams[4]), fontsize=16)
-
-    # Plot Dotty Factor-P
-    ax = axes[1,2]
-    ax.scatter(Params[:, 5], Metric, s=30, color=[0, 0.5, 0.5], alpha=0.2)
-    ax.scatter(BestParams[5], BestAREM, s=50, color=[1, 0, 0])
-    ax.set_xlabel(r'Factor$_{P}$', fontsize=16)
-    ax.set_ylabel(f'{NameMetric}' + r' $(ton/year)$', fontsize=16)
-    ax.set_title(r'Factor$_{P}$ = ' + str(BestParams[5]), fontsize=16)
-
-    # Save Figure
-    FileName = os.path.join(ProjectPath, 'FIGURES', f'Calibration_SDR_{Suffix}.jpg')
-    plt.tight_layout()
-    plt.savefig(FileName)
-    plt.close()
-
-    return BestParamsDict
+    return _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, 'SDR')
 
 def Plot_NDR_N(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
-
-    # Metric and parameters
-    FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'NDR_N_Metric_{Suffix}.csv')
-    Tmp         = np.loadtxt(FileName, delimiter=',', skiprows=1)
-    Params      = Tmp[:, :5]
-    Metric      = Tmp[:, 5]
-
-    # Observed
-    FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'NDR_N_Obs_{Suffix}.csv')
-    Obs         = np.loadtxt(FileName, delimiter=',', skiprows=1)
-    NGauges     = len(Obs) // len(Metric)
-    Obs         = Obs.reshape(len(Metric),NGauges)
-    Obs         = Obs.transpose()
-    Obs         = Obs[:, 0]
-    Obs         = Obs.reshape(NGauges,1)
-
-    # Simulation
-    FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'NDR_N_Sim_{Suffix}.csv')
-    Sim         = np.loadtxt(FileName, delimiter=',', skiprows=1)
-    Sim         = Sim.reshape(len(Metric),len(Sim) // len(Metric))
-    Sim         = Sim.transpose()
-
-    # Best Parameters
-    # Metric ya viene con FactorMetric aplicado (FactorMetric*RMSE), por lo que
-    # volver a multiplicar por FactorMetric antes de comparar recupera el RMSE
-    # real, sin importar si el algoritmo internamente maximiza (DDS) o minimiza
-    # (SCE-UA/LHS).
-    id_min          = np.argmin(FactorMetric * Metric)
-    BestParams      = Params[id_min, :]
-    BestParamsDict  = dict(zip(
-        ['SubCri_Len_N', 'Sub_Eff_N', 'Borselli-K_NDR', 'Factor_Load_N', 'Factor_Eff_N'],
-        BestParams))
-    BestAREM    = FactorMetric * Metric[id_min]
-    Metric      = FactorMetric * Metric
-
-    # Scatter Plot
-    fig, axes = plt.subplots(2, 4, figsize=(16, 10))
-
-    # Plot Obs Vs Sim
-    ax = axes[0,0]
-    max_val = max(np.max(Obs), np.max(Sim[:, id_min])) * 1.1
-    ax.plot([0, max_val], [0, max_val], linewidth=1.2, color=[0.8, 0.8, 0.8])
-    ax.scatter(Obs, Sim[:, id_min], s=100, edgecolor=[0, 0.5, 0.5], facecolor=[0, 0.7, 0.7],alpha=0.2, linewidth=1.2)
-    ax.set_xlabel(r'Observed $(kg/year)$', fontsize=16)
-    ax.set_ylabel(r'Simulated $(kg/year)$', fontsize=16)
-    ax.set_title(f'{NameMetric}' + ' = ' + str(round(BestAREM, 2)) + r' $(kg/year)$', fontsize=16)
-
-    # Plot Dotty Factor-Kc
-    ax = axes[0,1]
-    ax.scatter(Params[:, 0], Metric, s=30, color=[0.6, 0.6, 0.6], alpha=0.2)
-    ax.scatter(BestParams[0], BestAREM, s=50, color=[1, 0, 0])
-    ax.set_xlabel(r'SubCri$_{Len_N}$', fontsize=16)
-    ax.set_ylabel(f'{NameMetric}' + r' $(kg/year)$', fontsize=16)
-    ax.set_title(r'SubCri$_{Len_N}$ = ' + str(BestParams[0]), fontsize=16)
-
-    # Plot Dotty Factor-Kc
-    ax = axes[0,2]
-    ax.scatter(Params[:, 1], Metric, s=30, color=[0, 0.5, 0.5], alpha=0.2)
-    ax.scatter(BestParams[1], BestAREM, s=50, color=[1, 0, 0])
-    ax.set_xlabel(r'Sub$_{Eff_N}$', fontsize=16)
-    ax.set_ylabel(f'{NameMetric}' + r' $(kg/year)$', fontsize=16)
-    ax.set_title(r'Sub$_{Eff_N}$ = ' + str(BestParams[1]), fontsize=16)
-
-    # Plot Dotty Factor-Kc
-    ax = axes[0,3]
-    ax.scatter(Params[:, 2], Metric, s=30, color=[0, 0.5, 0.5], alpha=0.2)
-    ax.scatter(BestParams[2], BestAREM, s=50, color=[1, 0, 0])
-    ax.set_xlabel(r'Borselli$_{K}$', fontsize=16)
-    ax.set_ylabel(f'{NameMetric}' + r' $(kg/year)$', fontsize=16)
-    ax.set_title(r'Borselli$_{K}$ = ' + str(BestParams[2]), fontsize=16)
-
-    # Plot Dotty Z-Params
-    ax = axes[1,0]
-    ax.scatter(Params[:, 3], Metric, s=30, color=[1, 0.656, 0], alpha=0.2)
-    ax.scatter(BestParams[3], BestAREM, s=50, color=[1, 0, 0])
-    ax.set_xlabel(r'Factor$_{Load_N}$', fontsize=16)
-    ax.set_ylabel(f'{NameMetric}' + r' $(kg/year)$', fontsize=16)
-    ax.set_title(r'Factor$_{Load_N}$ = ' + str(BestParams[3]), fontsize=16)
-
-    # Plot Dotty Factor-Kc
-    ax = axes[1,1]
-    ax.scatter(Params[:, 4], Metric, s=30, color=[0.969, 0, 1], alpha=0.2)
-    ax.scatter(BestParams[4], BestAREM, s=50, color=[1, 0, 0])
-    ax.set_xlabel(r'Factor$_{Eff_N}$', fontsize=16)
-    ax.set_ylabel(f'{NameMetric}' + r' $(kg/year)$', fontsize=16)
-    ax.set_title(r'Factor$_{Eff_N}$ = ' + str(BestParams[4]), fontsize=16)
-
-    # Save Figure
-    FileName = os.path.join(ProjectPath, 'FIGURES', f'Calibration_NDR_N_{Suffix}.jpg')
-    plt.tight_layout()
-    plt.savefig(FileName)
-    plt.close()
-
-    return BestParamsDict
+    return _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, 'NDR_N')
 
 def Plot_NDR_P(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
-
-    # Metric and parameters
-    FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'NDR_P_Metric_{Suffix}.csv')
-    Tmp         = np.loadtxt(FileName, delimiter=',', skiprows=1)
-    Params      = Tmp[:, :5]
-    Metric      = Tmp[:, 5]
-
-    # Observed
-    FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'NDR_P_Obs_{Suffix}.csv')
-    Obs         = np.loadtxt(FileName, delimiter=',', skiprows=1)
-    NGauges     = len(Obs) // len(Metric)
-    Obs         = Obs.reshape(len(Metric),NGauges)
-    Obs         = Obs.transpose()
-    Obs         = Obs[:, 0]
-    Obs         = Obs.reshape(NGauges,1)
-
-    # Simulation
-    FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'NDR_P_Sim_{Suffix}.csv')
-    Sim         = np.loadtxt(FileName, delimiter=',', skiprows=1)
-    Sim         = Sim.reshape(len(Metric),len(Sim) // len(Metric))
-    Sim         = Sim.transpose()
-
-    # Best Parameters
-    # Metric ya viene con FactorMetric aplicado (FactorMetric*RMSE), por lo que
-    # volver a multiplicar por FactorMetric antes de comparar recupera el RMSE
-    # real, sin importar si el algoritmo internamente maximiza (DDS) o minimiza
-    # (SCE-UA/LHS).
-    id_min          = np.argmin(FactorMetric * Metric)
-    BestParams      = Params[id_min, :]
-    BestParamsDict  = dict(zip(
-        ['SubCri_Len_P', 'Sub_Eff_P', 'Borselli-K_NDR', 'Factor_Load_P', 'Factor_Eff_P'],
-        BestParams))
-    BestAREM    = FactorMetric * Metric[id_min]
-    Metric      = FactorMetric * Metric
-
-    # Scatter Plot
-    fig, axes = plt.subplots(2, 4, figsize=(16, 10))
-
-    # Plot Obs Vs Sim
-    ax = axes[0,0]
-    max_val = max(np.max(Obs), np.max(Sim[:, id_min])) * 1.1
-    ax.plot([0, max_val], [0, max_val], linewidth=1.2, color=[0.8, 0.8, 0.8])
-    ax.scatter(Obs, Sim[:, id_min], s=100, edgecolor=[0, 0.5, 0.5], facecolor=[0, 0.7, 0.7],alpha=0.2, linewidth=1.2)
-    ax.set_xlabel(r'Observed $(kg/year)$', fontsize=16)
-    ax.set_ylabel(r'Simulated $(kg/year)$', fontsize=16)
-    ax.set_title(f'{NameMetric}' + ' = ' + str(round(BestAREM, 2)) + r' $(kg/year)$', fontsize=16)
-
-    # Plot Dotty SubCri_Len_P
-    ax = axes[0,1]
-    ax.scatter(Params[:, 0], Metric, s=30, color=[0.6, 0.6, 0.6], alpha=0.2)
-    ax.scatter(BestParams[0], BestAREM, s=50, color=[1, 0, 0])
-    ax.set_xlabel(r'SubCri$_{Len_P}$', fontsize=16)
-    ax.set_ylabel(f'{NameMetric}' + r' $(kg/year)$', fontsize=16)
-    ax.set_title(r'SubCri$_{Len_P}$ = ' + str(BestParams[0]), fontsize=16)
-
-    # Plot Dotty Sub_Eff_P
-    ax = axes[0,2]
-    ax.scatter(Params[:, 1], Metric, s=30, color=[0, 0.5, 0.5], alpha=0.2)
-    ax.scatter(BestParams[1], BestAREM, s=50, color=[1, 0, 0])
-    ax.set_xlabel(r'Sub$_{Eff_P}$', fontsize=16)
-    ax.set_ylabel(f'{NameMetric}' + r' $(kg/year)$', fontsize=16)
-    ax.set_title(r'Sub$_{Eff_P}$ = ' + str(BestParams[1]), fontsize=16)
-
-    # Plot Dotty Borselli-K
-    ax = axes[0,3]
-    ax.scatter(Params[:, 2], Metric, s=30, color=[0, 0.5, 0.5], alpha=0.2)
-    ax.scatter(BestParams[2], BestAREM, s=50, color=[1, 0, 0])
-    ax.set_xlabel(r'Borselli$_{K}$', fontsize=16)
-    ax.set_ylabel(f'{NameMetric}' + r' $(kg/year)$', fontsize=16)
-    ax.set_title(r'Borselli$_{K}$ = ' + str(BestParams[2]), fontsize=16)
-
-    # Plot Dotty Factor_Load_P
-    ax = axes[1,0]
-    ax.scatter(Params[:, 3], Metric, s=30, color=[1, 0.656, 0], alpha=0.2)
-    ax.scatter(BestParams[3], BestAREM, s=50, color=[1, 0, 0])
-    ax.set_xlabel(r'Factor$_{Load_P}$', fontsize=16)
-    ax.set_ylabel(f'{NameMetric}' + r' $(kg/year)$', fontsize=16)
-    ax.set_title(r'Factor$_{Load_P}$ = ' + str(BestParams[3]), fontsize=16)
-
-    # Plot Dotty Factor_Eff_P
-    ax = axes[1,1]
-    ax.scatter(Params[:, 4], Metric, s=30, color=[0.969, 0, 1], alpha=0.2)
-    ax.scatter(BestParams[4], BestAREM, s=50, color=[1, 0, 0])
-    ax.set_xlabel(r'Factor$_{Eff_P}$', fontsize=16)
-    ax.set_ylabel(f'{NameMetric}' + r' $(kg/year)$', fontsize=16)
-    ax.set_title(r'Factor$_{Eff_P}$ = ' + str(BestParams[4]), fontsize=16)
-
-    # Save Figure
-    FileName = os.path.join(ProjectPath, 'FIGURES', f'Calibration_NDR_P_{Suffix}.jpg')
-    plt.tight_layout()
-    plt.savefig(FileName)
-    plt.close()
-
-    return BestParamsDict
+    return _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, 'NDR_P')
 
 # --------------------------------------------------------------------------
 # Name        : ismember.py
