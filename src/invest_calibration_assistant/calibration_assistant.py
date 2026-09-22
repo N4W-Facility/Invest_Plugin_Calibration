@@ -89,7 +89,7 @@ MODEL_SPEC = spec.ModelSpec(
     model_id="invest_calibration_assistant",
     model_title=gettext("InVEST Calibration Assistant"),
     module_name=__name__,
-    userguide='',
+    userguide='https://github.com/N4W-Facility/Invest_Plugin_Calibration/blob/main/CALIBRATION_PROCESS.md',
     input_field_order=[
         ['workspace_dir'],
         ['model_name'],
@@ -189,7 +189,14 @@ MODEL_SPEC = spec.ModelSpec(
             name=gettext('Biophysical Table'),
             about=gettext(
                 'CSV table mapping LULC codes to biophysical coefficients. '
-                'Required columns vary by model (see InVEST documentation).'),
+                'Standard columns vary by model (kc, usle_c/usle_p, '
+                'load_n/eff_n, load_p/eff_p — see InVEST documentation). '
+                'Must also include one boolean "Status_Cal_*" column per '
+                'calibrated parameter (1 = row calibrated, 0 = held fixed): '
+                'Status_Cal_Kc (AWY/SWY), Status_Cal_C/Status_Cal_P (SDR), '
+                'Status_Cal_Load_N/Status_Cal_Eff_N (NDR_N), '
+                'Status_Cal_Load_P/Status_Cal_Eff_P (NDR_P). Full '
+                'explanation and examples: plugin User\'s Guide, section 3.'),
             columns=[],
         ),
         spec.VectorInput(
@@ -408,7 +415,9 @@ MODEL_SPEC = spec.ModelSpec(
                 '"Params", "Model", "Min", "Max", "Value". '
                 'All parameters for all models can be in one file; '
                 'only the rows for the selected model are used during calibration. '
-                'The "Model" column is informational (AWY / SWY / SDR / NDR).'),
+                'The "Model" column is informational (AWY / SWY / SDR / NDR). '
+                'Full list of parameter names and typical ranges per model: '
+                'see the plugin User\'s Guide, section 2.'),
             index_col='Params',
             columns=[
                 spec.StringInput(
@@ -451,7 +460,11 @@ MODEL_SPEC = spec.ModelSpec(
                 'shapefile), plus one column per model to calibrate: '
                 '"AWY" (m³/year), "SWY" (mm/year), "SDR" (tonnes/year), '
                 '"NDR_N" (kg/year), "NDR_P" (kg/year). '
-                'Unused model columns are ignored.'),
+                'Unused model columns are ignored. Values must be '
+                'incremental (per-gauge), not cumulative, and each is an '
+                'absolute annual amount, never a concentration — see the '
+                'plugin User\'s Guide, sections 1.2 and 5, before building '
+                'this table.'),
             index_col='ws_id',
             columns=[
                 spec.IntegerInput(
