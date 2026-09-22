@@ -36,7 +36,17 @@ LOGGER = logging.getLogger(__name__)
 
 
 def _get_si():
-    """Lazy import of Spotpy_InVEST – only loaded when execute() is called."""
+    """Lazily import the ``Spotpy_InVEST`` helper module.
+
+    The import is deferred so that heavy dependencies (spotpy, GDAL,
+    rasterio, matplotlib, ...) are only loaded when :func:`execute` actually
+    runs a calibration, not at plugin discovery time.
+
+    Returns
+    -------
+    module
+        The imported ``Spotpy_InVEST`` module.
+    """
     from . import Spotpy_InVEST as _si  # noqa: PLC0415
     return _si
 
@@ -529,14 +539,26 @@ MODEL_SPEC = spec.ModelSpec(
 # ---------------------------------------------------------------------------
 
 def _build_model_paths(args):
-    """Extract spatial input paths from args into a unified model_paths dict.
+    """Collect the spatial/tabular inputs relevant to the selected model.
 
-    Returns a dict with all relevant file paths for the selected model,
-    using None for fields that are not applicable to the current model.
+    Parameters
+    ----------
+    args : dict
+        Raw arguments dict as received by :func:`execute`, keyed by the
+        input ids declared in ``MODEL_SPEC``.
+
+    Returns
+    -------
+    dict
+        ``model_paths`` dict with one entry per possible input. Fields
+        that do not apply to ``args['model_name']`` are set to ``''``
+        (or ``None`` for ``threshold_flow_accumulation``) rather than
+        omitted, so downstream code can always index the dict safely.
     """
     m = args['model_name']
 
     def _get(key):
+        """Return ``args[key]`` or ``''`` when missing/empty."""
         return args.get(key) or ''
 
     mp = {
@@ -577,10 +599,25 @@ def _build_model_paths(args):
 
 
 def _build_user_data(model_name, mp):
-    """Build the UserData dict expected by Factor_BioTable.
+    """Build the ``UserData`` dict expected by ``Factor_BioTable``.
 
-    Factor_BioTable only needs Status_* flags and, for some models,
-    a 'BioTable' key (unused when we pass the full path directly).
+    ``Factor_BioTable`` only needs the ``Status_*`` flags (one per model,
+    used to decide which columns of the biophysical table to modify) and,
+    for some models, a ``BioTable`` key that is unused when the full path
+    is passed directly.
+
+    Parameters
+    ----------
+    model_name : str
+        One of ``'AWY'``, ``'SWY'``, ``'SDR'``, ``'NDR_N'``, ``'NDR_P'``.
+    mp : dict
+        ``model_paths`` dict returned by :func:`_build_model_paths`.
+
+    Returns
+    -------
+    dict
+        Keys: ``Suffix``, ``BioTable``, and one ``Status_<MODEL>`` flag
+        (0 or 1) per supported model.
     """
     bio_basename = os.path.splitext(
         os.path.basename(mp['biophysical_table_path']))[0]
@@ -601,17 +638,29 @@ def _build_user_data(model_name, mp):
 # ---------------------------------------------------------------------------
 
 def _read_param_ranges(parameter_search_ranges_path):
-    """Read Parameters.csv → (params_val, params_min, params_max).
+    """Read the parameter search-range CSV into value/min/max dicts.
 
-    Expected format (Parameters.csv):
+    Expected format (``Parameters.csv``)::
+
         Params, Model, Min, Max, Value
 
     Each row name in the ``Params`` column maps directly to an internal
-    parameter key (with the single exception of ``Borselli-IC0`` → ``IC0``).
+    parameter key (with the single exception of ``Borselli-IC0`` -> ``IC0``).
     The ``Model`` column is informational only; all rows are loaded and the
-    calibration engine selects the relevant subset per model.
+    calibration engine selects the relevant subset per model. Trailing
+    empty rows are silently ignored.
 
-    Trailing empty rows are silently ignored.
+    Parameters
+    ----------
+    parameter_search_ranges_path : str
+        Path to the parameter search-range CSV file.
+
+    Returns
+    -------
+    tuple of dict
+        ``(params_val, params_min, params_max)``, each keyed by internal
+        parameter name, with the initial guess, lower bound and upper
+        bound respectively.
     """
     df = pd.read_csv(parameter_search_ranges_path)
 
@@ -669,7 +718,22 @@ def _read_param_ranges(parameter_search_ranges_path):
 # ---------------------------------------------------------------------------
 
 def _build_spotpy_params(model_name, params_min, params_max):
-    """Return spotpy.parameter.Uniform objects for the given model."""
+    """Build the list of ``spotpy.parameter.Uniform`` objects to sample.
+
+    Parameters
+    ----------
+    model_name : str
+        One of ``'AWY'``, ``'SWY'``, ``'SDR'``, ``'NDR_N'``, ``'NDR_P'``.
+    params_min, params_max : dict
+        Lower/upper search bounds per internal parameter name, as
+        returned by :func:`_read_param_ranges`.
+
+    Returns
+    -------
+    list of spotpy.parameter.Uniform
+        One entry per parameter required by ``model_name``, in the fixed
+        order consumed by the corresponding ``_execute_*_direct`` function.
+    """
     import spotpy  # noqa: PLC0415
 
     _required = {
@@ -691,7 +755,24 @@ def _build_spotpy_params(model_name, params_min, params_max):
 # ---------------------------------------------------------------------------
 
 def _save_eval_csv(workspace, name, header, rows):
-    """Append one iteration's data to an evaluation CSV."""
+    """Append one calibration iteration's data to an EVALUATIONS CSV.
+
+    Creates the file with ``header`` as its first line the first time it
+    is called for a given ``name``; subsequent calls only append rows.
+
+    Parameters
+    ----------
+    workspace : str
+        Calibration workspace directory (contains the ``EVALUATIONS``
+        sub-folder).
+    name : str
+        CSV file name, e.g. ``'AWY_Metric_MyProject.csv'``.
+    header : str
+        Comma-separated column header, written only when the file is
+        created.
+    rows : list of str
+        Comma-separated data rows to append.
+    """
     path = os.path.join(workspace, 'EVALUATIONS', name)
     file_exists = os.path.isfile(path)
     with open(path, 'a') as f:
@@ -702,7 +783,40 @@ def _save_eval_csv(workspace, name, header, rows):
 
 
 def _execute_awy_direct(workspace, mp, user_data, vector, metric_name, factor_metric, obs_df, si):
-    """One AWY calibration iteration using direct file paths."""
+    """Run one AWY calibration iteration and score it against observations.
+
+    Applies the candidate ``Z`` / ``Factor-Kc`` parameters to a temporary
+    biophysical table, runs ``natcap.invest.annual_water_yield``, compares
+    simulated watershed yield against ``obs_df``, and appends the
+    iteration's parameters/metric/obs/sim to the EVALUATIONS CSVs.
+
+    Parameters
+    ----------
+    workspace : str
+        Calibration workspace directory.
+    mp : dict
+        ``model_paths`` dict from :func:`_build_model_paths`.
+    user_data : dict
+        ``UserData`` dict from :func:`_build_user_data`.
+    vector : sequence of float
+        Candidate parameter vector ``[Z, Factor-Kc]`` proposed by spotpy.
+    metric_name : str
+        Objective function name, as used by ``Spotpy_InVEST.Cal_FunObj``.
+    factor_metric : float
+        ``+1`` or ``-1``; flips the sign of the metric so that every
+        optimization algorithm consistently searches in the same
+        direction (minimize vs. maximize).
+    obs_df : pandas.DataFrame
+        Observed data table (must contain ``ws_id`` and ``AWY`` columns).
+    si : module
+        The ``Spotpy_InVEST`` module, as returned by :func:`_get_si`.
+
+    Returns
+    -------
+    float
+        ``factor_metric``-adjusted objective function value for this
+        iteration.
+    """
     import natcap.invest.annual_water_yield as _awy  # noqa: PLC0415
 
     z, kc = float(vector[0]), float(vector[1])
@@ -754,7 +868,41 @@ def _execute_awy_direct(workspace, mp, user_data, vector, metric_name, factor_me
 
 
 def _execute_swy_direct(workspace, mp, user_data, vector, metric_name, factor_metric, obs_df, si):
-    """One SWY calibration iteration using direct file paths."""
+    """Run one SWY calibration iteration and score it against observations.
+
+    Applies the candidate ``Alpha``/``Beta``/``Gamma``/``Factor-Kc_m``
+    parameters to a temporary biophysical table, runs
+    ``natcap.invest.seasonal_water_yield``, computes zonal-mean actual
+    evapotranspiration per watershed, compares it against ``obs_df``, and
+    appends the iteration's data to the EVALUATIONS CSVs.
+
+    Parameters
+    ----------
+    workspace : str
+        Calibration workspace directory.
+    mp : dict
+        ``model_paths`` dict from :func:`_build_model_paths`.
+    user_data : dict
+        ``UserData`` dict from :func:`_build_user_data`.
+    vector : sequence of float
+        Candidate parameter vector ``[Alpha, Beta, Gamma, Factor-Kc_m]``
+        proposed by spotpy.
+    metric_name : str
+        Objective function name, as used by ``Spotpy_InVEST.Cal_FunObj``.
+    factor_metric : float
+        ``+1`` or ``-1``; flips the sign of the metric so every
+        optimization algorithm searches in the same direction.
+    obs_df : pandas.DataFrame
+        Observed data table (must contain ``ws_id`` and ``SWY`` columns).
+    si : module
+        The ``Spotpy_InVEST`` module, as returned by :func:`_get_si`.
+
+    Returns
+    -------
+    float
+        ``factor_metric``-adjusted objective function value for this
+        iteration.
+    """
     from natcap.invest.seasonal_water_yield import seasonal_water_yield as _swy  # noqa: PLC0415
 
     alpha, beta, gamma, kc_m = (float(vector[i]) for i in range(4))
@@ -817,7 +965,41 @@ def _execute_swy_direct(workspace, mp, user_data, vector, metric_name, factor_me
 
 
 def _execute_sdr_direct(workspace, mp, user_data, vector, metric_name, factor_metric, obs_df, si):
-    """One SDR calibration iteration using direct file paths."""
+    """Run one SDR calibration iteration and score it against observations.
+
+    Applies the candidate ``sdr_max``/``Borselli-K_SDR``/``IC0``/``L_max``/
+    ``Factor-C``/``Factor-P`` parameters to a temporary biophysical table,
+    runs ``natcap.invest.sdr``, compares simulated sediment export against
+    ``obs_df``, and appends the iteration's data to the EVALUATIONS CSVs.
+
+    Parameters
+    ----------
+    workspace : str
+        Calibration workspace directory.
+    mp : dict
+        ``model_paths`` dict from :func:`_build_model_paths`.
+    user_data : dict
+        ``UserData`` dict from :func:`_build_user_data`.
+    vector : sequence of float
+        Candidate parameter vector
+        ``[sdr_max, Borselli-K_SDR, IC0, L_max, Factor-C, Factor-P]``
+        proposed by spotpy.
+    metric_name : str
+        Objective function name, as used by ``Spotpy_InVEST.Cal_FunObj``.
+    factor_metric : float
+        ``+1`` or ``-1``; flips the sign of the metric so every
+        optimization algorithm searches in the same direction.
+    obs_df : pandas.DataFrame
+        Observed data table (must contain ``ws_id`` and ``SDR`` columns).
+    si : module
+        The ``Spotpy_InVEST`` module, as returned by :func:`_get_si`.
+
+    Returns
+    -------
+    float
+        ``factor_metric``-adjusted objective function value for this
+        iteration.
+    """
     from natcap.invest.sdr import sdr as _sdr  # noqa: PLC0415
     from simpledbf import Dbf5                  # noqa: PLC0415
 
@@ -878,7 +1060,46 @@ def _execute_sdr_direct(workspace, mp, user_data, vector, metric_name, factor_me
 
 def _execute_ndr_direct(workspace, mp, user_data, vector, metric_name, factor_metric, obs_df, si,
                         model_name):
-    """One NDR_N or NDR_P calibration iteration using direct file paths."""
+    """Run one NDR_N or NDR_P calibration iteration and score it.
+
+    Applies the candidate nutrient-delivery parameters to a temporary
+    biophysical table, runs ``natcap.invest.ndr`` with either nitrogen or
+    phosphorus calculation enabled (based on ``model_name``), computes
+    zonal-sum export per watershed, compares it against ``obs_df``, and
+    appends the iteration's data to the EVALUATIONS CSVs.
+
+    Parameters
+    ----------
+    workspace : str
+        Calibration workspace directory.
+    mp : dict
+        ``model_paths`` dict from :func:`_build_model_paths`.
+    user_data : dict
+        ``UserData`` dict from :func:`_build_user_data`.
+    vector : sequence of float
+        Candidate parameter vector. For ``NDR_N``:
+        ``[SubCri_Len_N, Sub_Eff_N, Borselli-K_NDR, Factor_Load_N, Factor_Eff_N]``.
+        For ``NDR_P``:
+        ``[SubCri_Len_P, Sub_Eff_P, Borselli-K_NDR, Factor_Load_P, Factor_Eff_P]``.
+    metric_name : str
+        Objective function name, as used by ``Spotpy_InVEST.Cal_FunObj``.
+    factor_metric : float
+        ``+1`` or ``-1``; flips the sign of the metric so every
+        optimization algorithm searches in the same direction.
+    obs_df : pandas.DataFrame
+        Observed data table (must contain ``ws_id`` and either ``NDR_N``
+        or ``NDR_P`` columns, matching ``model_name``).
+    si : module
+        The ``Spotpy_InVEST`` module, as returned by :func:`_get_si`.
+    model_name : {'NDR_N', 'NDR_P'}
+        Which nutrient to calibrate.
+
+    Returns
+    -------
+    float
+        ``factor_metric``-adjusted objective function value for this
+        iteration.
+    """
     from natcap.invest.ndr import ndr as _ndr  # noqa: PLC0415
 
     if model_name == 'NDR_N':
@@ -977,7 +1198,36 @@ def _execute_ndr_direct(workspace, mp, user_data, vector, metric_name, factor_me
 # ---------------------------------------------------------------------------
 
 def _run_best_params(workspace, model_name, mp, user_data, params_val, si):
-    """Run the selected InVEST model once with the best-fit calibrated parameters."""
+    """Run the selected InVEST model once with the best-fit parameters.
+
+    Builds the final biophysical table from ``params_val``, then calls
+    the corresponding InVEST model (AWY / SWY / SDR / NDR) with the full
+    (non-calibration) watershed set, writing results to
+    ``OUTPUTS/<model_name>_best``.
+
+    Parameters
+    ----------
+    workspace : str
+        Calibration workspace directory.
+    model_name : str
+        One of ``'AWY'``, ``'SWY'``, ``'SDR'``, ``'NDR_N'``, ``'NDR_P'``.
+    mp : dict
+        ``model_paths`` dict from :func:`_build_model_paths`.
+    user_data : dict
+        ``UserData`` dict from :func:`_build_user_data`.
+    params_val : dict
+        Final parameter values to use, keyed by internal parameter name
+        (typically the calibration's best-fit result merged with the
+        initial guess for any parameter the model didn't calibrate).
+    si : module
+        The ``Spotpy_InVEST`` module, as returned by :func:`_get_si`.
+
+    Returns
+    -------
+    None
+        Results are written to disk under ``OUTPUTS/<model_name>_best``;
+        nothing is returned.
+    """
     import natcap.invest.annual_water_yield as _awy       # noqa: PLC0415
     from natcap.invest.seasonal_water_yield import seasonal_water_yield as _swy  # noqa: PLC0415
     from natcap.invest.sdr import sdr as _sdr             # noqa: PLC0415
@@ -1094,13 +1344,27 @@ def _run_best_params(workspace, model_name, mp, user_data, params_val, si):
 # ---------------------------------------------------------------------------
 
 def execute(args):
-    """Run InVEST calibration using individual per-model spatial inputs.
+    """Entry point for the InVEST Calibration Assistant plugin.
+
+    Orchestrates a full calibration run for the model selected via
+    ``args['model_name']``: builds inputs, runs the spotpy sampler
+    (DDS / SCE-UA / LHS) for ``n_simulations`` iterations, generates
+    calibration plots to identify the best-fit parameter set, and
+    finally re-runs the InVEST model once with those best-fit
+    parameters over the full watershed set.
 
     Parameters
     ----------
     args : dict
-        Keys defined in MODEL_SPEC.  Required keys vary by model_name;
-        the Workbench enforces this through the required/allowed expressions.
+        Keys defined in ``MODEL_SPEC``. Required keys vary by
+        ``model_name``; the Workbench enforces this through the
+        ``required``/``allowed`` expressions on each input.
+
+    Returns
+    -------
+    dict
+        Empty dict, as required by the InVEST plugin framework's
+        ``execute()`` contract (a file-registry placeholder).
     """
     LOGGER.info('=' * 60)
     LOGGER.info('InVEST Calibration Assistant')
@@ -1155,6 +1419,7 @@ def execute(args):
     }
 
     def _sim_fn(vec):
+        """Dispatch one calibration iteration to the model-specific runner."""
         if model_name in ('NDR_N', 'NDR_P'):
             return _execute_ndr_direct(workspace, mp, user_data, vec,
                                        metric, factor_metric, obs_df, si,
@@ -1286,7 +1551,25 @@ def execute(args):
 
 @validation.invest_validator
 def validate(args, limit_to=None):
-    """Validate plugin arguments against MODEL_SPEC."""
+    """Validate plugin arguments against ``MODEL_SPEC``.
+
+    In addition to the standard ``MODEL_SPEC`` validation, checks that
+    ``n_simulations`` is a valid integer >= 10 (required by the DDS
+    algorithm's initialization phase).
+
+    Parameters
+    ----------
+    args : dict
+        Arguments to validate, keyed as in ``MODEL_SPEC``.
+    limit_to : str, optional
+        If given, restrict validation to this single input id.
+
+    Returns
+    -------
+    list of tuple
+        ``(keys, message)`` warnings, in the format expected by the
+        InVEST validation framework.
+    """
     warnings = validation.validate(args, MODEL_SPEC)
 
     if limit_to is None or limit_to == 'n_simulations':

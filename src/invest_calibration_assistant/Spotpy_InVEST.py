@@ -44,8 +44,8 @@ import rasterio
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
 from matplotlib.lines import Line2D
-# Tipografía tipo LaTeX (Computer Modern) para texto y matemáticas, sin
-# depender de una instalación de TeX ni de fuentes externas al sistema.
+# LaTeX-style typography (Computer Modern) for text and math, without
+# depending on a TeX installation or external system fonts.
 rcParams['font.family'] = 'serif'
 rcParams['font.serif']  = ['cmr10', 'DejaVu Serif']
 rcParams['mathtext.fontset'] = 'cm'
@@ -55,63 +55,89 @@ from rasterstats import zonal_stats
 gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 def CreateFolder(dir):
+    """Create a directory (and any missing parents), ignoring if it exists.
+
+    Parameters
+    ----------
+    dir : str
+        Path of the directory to create.
+
+    Returns
+    -------
+    None
+    """
     try:
         os.makedirs(dir)
     except FileExistsError:
-        # directory already exists
+        # Directory already exists — nothing to do.
         pass
 
 def Factor_BioTable(PathBioTable, Params, UserData):
-    # --------------------------------------------------------------------------------------------------------------
-    # Read Biophycial Table
-    # --------------------------------------------------------------------------------------------------------------
+    """Apply calibration factors to the biophysical table for one model.
+
+    Reads the biophysical CSV and multiplies the columns relevant to the
+    active model (flagged via ``UserData['Status_*']``) by the candidate
+    calibration factors in ``Params``, but only for the LULC rows flagged
+    as calibratable (``Status_Cal_*`` == 1). Values are clipped to their
+    physical upper bound (e.g. Kc <= 1.2, usle_c/usle_p <= 1) after scaling.
+
+    Parameters
+    ----------
+    PathBioTable : str
+        Path to the biophysical table CSV (Latin-1 encoded).
+    Params : dict
+        Candidate calibration factors for the active model, e.g.
+        ``{'Factor-Kc': 1.05}`` for AWY or
+        ``{'Factor-C': 0.9, 'Factor-P': 1.0}`` for SDR.
+    UserData : dict
+        ``Status_*`` flags (0/1) selecting which model's columns to
+        modify, as built by ``_build_user_data`` in
+        ``calibration_assistant.py``.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Biophysical table with the calibrated columns updated in place.
+    """
+    # Read the biophysical table.
     Table = pd.read_csv(PathBioTable, encoding='latin-1')
 
-    # Anual Water Yield
+    # Annual Water Yield
     if UserData['Status_AWY']:
-        # --------------------------------------------------------------------------------------------------------------
-        # Afectación de parámetros Kc en la tabla biofísica
-        # --------------------------------------------------------------------------------------------------------------
-        # Aplica el factor multiplicador a los valores de carga y redondea a 3 decimales
+        # Scale the Kc column by the calibration factor and round to 2 decimals.
         Values = round(Table['Kc'] * Params['Factor-Kc'], 2)
-        # Si el factor hace que el Kc sea mayor que 1.2, limita el valor a 1.2
+        # Cap Kc at 1.2 (physical upper bound).
         Values[Values >= 1.2] = 1.2
-        # Asigna los valores de Kc modificados a la tabla
+        # Write the scaled Kc back only for rows flagged as calibratable.
         Table.loc[Table['Status_Cal_Kc'] == 1, 'Kc'] = Values.loc[Table['Status_Cal_Kc'] == 1]
 
     # Seasonal Water Yield
     if UserData['Status_SWY']:
-        # --------------------------------------------------------------------------------------------------------------
-        # Afectacion de parametros Kc en la tabla biofisica
-        # --------------------------------------------------------------------------------------------------------------
+        # Scale each monthly Kc_<month> column by the calibration factor.
         for ij in range(1, 13):
-            # Aplica el factor multiplicador a los valores de carga y redondea a 3 decimales
             Values = round(Table['Kc_' + str(ij)] * round(Params['Factor-Kc_m'], 2), 2)
-            # Si el factor hace que el Kc sea mayor que 1.2, limita el valor a 1.2
+            # Cap Kc at 1.2 (physical upper bound).
             Values[Values >= 1.2] = 1.2
-            # Asigna los valores de Kc modificados a la tabla
+            # Write the scaled Kc back only for rows flagged as calibratable.
             Table.loc[Table['Status_Cal_Kc'] == 1, 'Kc_' + str(ij)] = Values.loc[Table['Status_Cal_Kc'] == 1]
 
     # Sediment Delivery Ratio
     if UserData['Status_SDR'] == 1:
-        # ---------------------------------------------------------------------
-        # Afectacion de parametro de factor de cobertura en la tabla biofisica
-        # ---------------------------------------------------------------------
-        # Aplica el factor multiplicador a los valores del factor C y redondea a 5 decimales
+        # Scale the USLE cover factor (C) and round to 5 decimals.
         Values = round(Table['usle_c'] * round(Params['Factor-C'], 2), 5)
-        # Si el factor hace que el C sea mayor que 1, limita el valor a 1
+        # Cap C at 1 (physical upper bound).
         Values[Values > 1] = 1
-        # Asigna los valores de C modificados a la tabla
+        # Write the scaled C back only for rows flagged as calibratable.
         Table.loc[Table['Status_Cal_C'] == 1, 'usle_c'] = Values.loc[Table['Status_Cal_C'] == 1]
 
-        # Aplica el factor multiplicador a los valores del factor P y redondea a 2 decimales
+        # Scale the USLE support-practice factor (P) and round to 2 decimals.
         Values = round(Table['usle_p'] * round(Params['Factor-P'], 2), 2)
-        # Si el factor hace que el P sea mayor que 1, limita el valor a 1
+        # Cap P at 1 (physical upper bound).
         Values[Values > 1] = 1
-        # Asigna los valores de C modificados a la tabla
+        # Write the scaled P back only for rows flagged as calibratable.
         Table.loc[Table['Status_Cal_P'] == 1, 'usle_p'] = Values.loc[Table['Status_Cal_P'] == 1]
 
-    # Nutrient Delivery Ratio
+    # Nutrient Delivery Ratio (nitrogen)
     if (UserData['Status_NDR_N'] == 1):
         Values = round(Table['load_n'] * Params['Factor_Load_N'], 3)
         Table.loc[Table['Status_Cal_Load_N'] == 1, 'load_n'] = Values.loc[Table['Status_Cal_Load_N'] == 1]
@@ -119,6 +145,7 @@ def Factor_BioTable(PathBioTable, Params, UserData):
         Values = round(Table['eff_n'] * Params['Factor_Eff_N'], 2)
         Table.loc[Table['Status_Cal_Eff_N'] == 1, 'eff_n'] = Values.loc[Table['Status_Cal_Eff_N'] == 1]
 
+    # Nutrient Delivery Ratio (phosphorus)
     if (UserData['Status_NDR_P'] == 1):
         Values = round(Table['load_p'] * Params['Factor_Load_P'], 3)
         Table.loc[Table['Status_Cal_Load_P'] == 1, 'load_p'] = Values.loc[Table['Status_Cal_Load_P'] == 1]
@@ -126,14 +153,36 @@ def Factor_BioTable(PathBioTable, Params, UserData):
         Values = round(Table['eff_p'] * Params['Factor_Eff_P'], 2)
         Table.loc[Table['Status_Cal_Eff_P'] == 1, 'eff_p'] = Values.loc[Table['Status_Cal_Eff_P'] == 1]
 
-    # Carbons
+    # Carbon (not yet implemented)
     # if UserData['Status_CO2'] == 1:
     #    print('')
 
     return Table
 
 def Cal_FunObj(Obs, Sim, NameFunObj):
+    """Compute the calibration objective function value.
 
+    Thin dispatcher over ``spotpy.objectivefunctions``, selecting the
+    metric by its display name (as used in ``MODEL_SPEC``'s
+    ``evaluation_metric`` option list).
+
+    Parameters
+    ----------
+    Obs : array-like
+        Observed values.
+    Sim : array-like
+        Simulated values, same length/order as ``Obs``.
+    NameFunObj : str
+        One of ``'Mean Square Error (MSE)'``, ``'Mean Absolute Error (MAE)'``,
+        ``'Root Mean Square Error (RMSE)'``,
+        ``'Relative Root Mean Squared Error (RRMSE)'``.
+
+    Returns
+    -------
+    float or None
+        The computed metric, or ``None`` if ``NameFunObj`` does not match
+        any of the supported metric names.
+    """
     if NameFunObj == "Mean Square Error (MSE)":
         return spotpy.objectivefunctions.mse(Obs, Sim)
     elif NameFunObj == "Mean Absolute Error (MAE)":
@@ -155,7 +204,22 @@ _BEST_COLOR = '#7B1E24'   # wine red (vinotinto)
 _REF_COLOR  = [0.8, 0.8, 0.8]
 
 def _style_axis(ax, fontsize=16):
-    """Clean, modern panel style shared by every calibration plot."""
+    """Apply the shared clean/modern panel style used by every calibration plot.
+
+    Removes the top/right spines, colors the remaining spines and tick
+    labels in dark gray, and adds a light dotted grid behind the data.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Axes to style, in place.
+    fontsize : int, optional
+        Reference font size (tick labels are drawn 3pt smaller). Default 16.
+
+    Returns
+    -------
+    None
+    """
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_color('#595959')
@@ -224,7 +288,41 @@ _MODEL_PLOT_CONFIG = {
 }
 
 def _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, ModelName):
+    """Build the calibration figure for one model and return its best-fit parameters.
 
+    Reads the ``EVALUATIONS/<ModelName>_{Metric,Obs,Sim}_<Suffix>.csv``
+    files written during the calibration run, identifies the iteration
+    with the best objective-function value, and renders one figure with:
+    an Observed-vs-Simulated scatter panel (using the best-fit run) plus
+    one dotty plot per calibrated parameter (parameter value vs. metric,
+    best-fit point highlighted). The figure is saved to
+    ``FIGURES/Calibration_<ModelName>_<Suffix>.jpg``.
+
+    Parameters
+    ----------
+    ProjectPath : str
+        Calibration workspace directory (contains ``EVALUATIONS`` and
+        ``FIGURES`` sub-folders).
+    Suffix : str
+        Project suffix used to build the EVALUATIONS/FIGURES file names.
+    NameMetric : str
+        Short metric label used in axis/title text (e.g. ``'RMSE'``).
+    FactorMetric : float
+        ``+1`` or ``-1``; the sign applied to the metric during
+        calibration (see ``_execute_*_direct`` in
+        ``calibration_assistant.py``). Used here to recover the true
+        (unsigned) metric value and to find its minimum regardless of
+        whether the optimizer maximized or minimized.
+    ModelName : str
+        One of ``'AWY'``, ``'SWY'``, ``'SDR'``, ``'NDR_N'``, ``'NDR_P'``;
+        selects the plot configuration from ``_MODEL_PLOT_CONFIG``.
+
+    Returns
+    -------
+    dict
+        Best-fit parameter values, keyed by internal parameter name
+        (``{param_name: value, ...}``).
+    """
     cfg         = _MODEL_PLOT_CONFIG[ModelName]
     unit        = cfg['unit']
     time_scale  = cfg['time_scale']
@@ -252,11 +350,11 @@ def _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, ModelName):
     Sim         = Sim.reshape(len(Metric), len(Sim) // len(Metric))
     Sim         = Sim.transpose() * time_scale
 
-    # Best Parameters
-    # Metric ya viene con FactorMetric aplicado (FactorMetric*RMSE), por lo que
-    # volver a multiplicar por FactorMetric antes de comparar recupera el RMSE
-    # real, sin importar si el algoritmo internamente maximiza (DDS) o minimiza
-    # (SCE-UA/LHS).
+    # Best parameters.
+    # Metric already has FactorMetric applied (FactorMetric*RMSE), so
+    # multiplying by FactorMetric again before comparing recovers the true
+    # RMSE, regardless of whether the algorithm internally maximizes (DDS)
+    # or minimizes (SCE-UA/LHS).
     id_min          = np.argmin(FactorMetric * Metric)
     BestParams      = Params[id_min, :]
     BestParamsDict  = dict(zip(param_keys, BestParams))
@@ -317,18 +415,23 @@ def _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, ModelName):
     return BestParamsDict
 
 def Plot_AWY(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
+    """Build the AWY calibration figure. See :func:`_plot_calibration`."""
     return _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, 'AWY')
 
 def Plot_SWY(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
+    """Build the SWY calibration figure. See :func:`_plot_calibration`."""
     return _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, 'SWY')
 
 def Plot_SDR(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
+    """Build the SDR calibration figure. See :func:`_plot_calibration`."""
     return _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, 'SDR')
 
 def Plot_NDR_N(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
+    """Build the NDR_N calibration figure. See :func:`_plot_calibration`."""
     return _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, 'NDR_N')
 
 def Plot_NDR_P(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
+    """Build the NDR_P calibration figure. See :func:`_plot_calibration`."""
     return _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, 'NDR_P')
 
 # --------------------------------------------------------------------------
@@ -338,32 +441,38 @@ def Plot_NDR_P(ProjectPath, Suffix, NameMetric, InVEST_Main_Path, FactorMetric):
 # --------------------------------------------------------------------------
 # %% ismember
 def ismember(a_vec, b_vec, method=None):
-    """
+    """MATLAB-equivalent of ``ismember``: locate elements of ``a_vec`` in ``b_vec``.
 
-    Description
-    -----------
-    MATLAB equivalent ismember function
-    [LIA,LOCB] = ISMEMBER(A,B) also returns an array LOCB containing the
-    lowest absolute index in B for each element in A which is a member of
-    B and 0 if there is no such index.
+    Equivalent to MATLAB's ``[LIA, LOCB] = ISMEMBER(A, B)``: returns a
+    boolean mask over ``a_vec`` (True where that element is found in
+    ``b_vec``) together with the corresponding index into ``b_vec`` for
+    each matched element.
+
     Parameters
     ----------
     a_vec : list or array
+        Values to look up.
     b_vec : list or array
-    method : None or 'rows' (default: None).
-        rows can be used for row-wise matrice comparison.
-    Returns an array containing logical 1 (true) where the data in A is found
-    in B. Elsewhere, the array contains logical 0 (false)
-    -------
-    Tuple
+        Values to look up against.
+    method : {None, 'rows'}, optional
+        ``'rows'`` performs the comparison row-wise over 2-D arrays
+        instead of element-wise. Default ``None``.
 
-    Example
+    Returns
     -------
-    a_vec = np.array([1,2,3,None])
-    b_vec = np.array([4,1,2])
-    Iloc,idx = ismember(a_vec,b_vec)
-    a_vec[Iloc] == b_vec[idx]
+    Iloc : ndarray of bool
+        Boolean mask over ``a_vec``, True where that element is found in
+        ``b_vec``.
+    idx : ndarray of int
+        For each True entry in ``Iloc``, the index of the matching value
+        in ``b_vec`` (same order as ``a_vec[Iloc]``).
 
+    Examples
+    --------
+    >>> a_vec = np.array([1, 2, 3, None])
+    >>> b_vec = np.array([4, 1, 2])
+    >>> Iloc, idx = ismember(a_vec, b_vec)
+    >>> a_vec[Iloc] == b_vec[idx]
     """
     # Set types
     a_vec, b_vec = _settypes(a_vec, b_vec)
@@ -386,6 +495,21 @@ def ismember(a_vec, b_vec, method=None):
 
 # %% Compute
 def _settypes(a_vec, b_vec):
+    """Normalize inputs to numpy arrays for :func:`ismember`.
+
+    Converts pandas/list inputs to numpy arrays, replacing ``None``
+    entries with the string ``'NaN'`` for pandas inputs.
+
+    Parameters
+    ----------
+    a_vec, b_vec : list, pandas.Series, or ndarray
+        Inputs to normalize.
+
+    Returns
+    -------
+    tuple of ndarray
+        ``(a_vec, b_vec)`` as numpy arrays.
+    """
     if 'pandas' in str(type(a_vec)):
         a_vec.values[np.where(a_vec.values == None)] = 'NaN'
         a_vec = np.array(a_vec.values)
@@ -404,6 +528,20 @@ def _settypes(a_vec, b_vec):
 
 # %% Compute
 def _compute(a_vec, b_vec):
+    """Core element-wise lookup used by :func:`ismember`.
+
+    Parameters
+    ----------
+    a_vec, b_vec : ndarray
+        Arrays to compare (as returned by :func:`_settypes`).
+
+    Returns
+    -------
+    bool_ind : ndarray of bool
+        Boolean mask over ``a_vec``, True where found in ``b_vec``.
+    common_ind : ndarray of int
+        Matching index into ``b_vec`` for each True entry in ``bool_ind``.
+    """
     bool_ind = np.isin(a_vec, b_vec)
     common = a_vec[bool_ind]
     [common_unique, common_inv] = np.unique(common, return_inverse=True)
@@ -426,6 +564,21 @@ Options:
   --version     Show version.
 """
 def bbox_to_pixel_offsets(gt, bbox):
+    """Convert a geographic bounding box into raster pixel offsets/size.
+
+    Parameters
+    ----------
+    gt : tuple
+        GDAL geotransform, as returned by ``Dataset.GetGeoTransform()``.
+    bbox : tuple
+        ``(minx, maxx, miny, maxy)`` bounding box in the raster's CRS.
+
+    Returns
+    -------
+    tuple of int
+        ``(x1, y1, xsize, ysize)`` pixel offset and size, suitable for
+        ``Band.ReadAsArray(*offset)``.
+    """
     originX = gt[0]
     originY = gt[3]
     pixel_width = gt[1]
@@ -442,6 +595,33 @@ def bbox_to_pixel_offsets(gt, bbox):
 
 
 def zonal_stats_1(vector_path, raster_path, nodata_value=None, global_src_extent=False):
+    """Compute per-feature zonal statistics of a raster within vector polygons.
+
+    For each feature in ``vector_path``, rasterizes the polygon in-memory
+    and computes min/mean/max/std/sum/count over the overlapping raster
+    cells in ``raster_path``.
+
+    Parameters
+    ----------
+    vector_path : str
+        Path to the polygon vector file (e.g. shapefile).
+    raster_path : str
+        Path to the single-band raster to summarize.
+    nodata_value : float, optional
+        Raster nodata value to mask out. If not given, uses whatever is
+        already set on the raster band.
+    global_src_extent : bool, optional
+        If True, read the full raster extent covering all features into
+        memory once (faster with slow disks / well-tiled rasters, but
+        higher memory use for large extents). If False (default), read
+        only the local extent per feature.
+
+    Returns
+    -------
+    list of dict
+        One dict per feature with keys ``min``, ``mean``, ``max``,
+        ``std``, ``sum``, ``count``, ``fid``.
+    """
     rds = gdal.Open(raster_path, GA_ReadOnly)
     assert(rds)
     rb = rds.GetRasterBand(1)
@@ -545,24 +725,46 @@ def zonal_stats_1(vector_path, raster_path, nodata_value=None, global_src_extent
 import pyogrio
 
 def calculate_zonal_stats(shapefile_path, raster_path, output_path_shp, ws_id="ws_id", Suffix=""):
-    """
-    Calcula estadísticas zonales para un raster basado en un shapefile con múltiples polígonos.
+    """Compute per-watershed zonal statistics of a raster (rasterstats-based).
 
-    Parámetros:
-        shapefile_path (str): Ruta al archivo shapefile.
-        raster_path (str): Ruta al archivo raster.
-        ws_id (str): Nombre del atributo en el shapefile para agrupar los polígonos.
+    Reprojects the shapefile to the raster's CRS if needed, computes
+    mean/min/max/median/sum per unique ``ws_id`` group via
+    ``rasterstats.zonal_stats``, and writes the combined result to a new
+    shapefile ``Zonal_<Suffix>.shp`` in ``output_path_shp``.
 
-    Retorna:
-        gpd.GeoDataFrame: GeoDataFrame con las estadísticas zonales calculadas.
+    Parameters
+    ----------
+    shapefile_path : str
+        Path to the input polygon shapefile.
+    raster_path : str
+        Path to the raster to summarize.
+    output_path_shp : str
+        Directory where the output ``Zonal_<Suffix>.shp`` is written.
+    ws_id : str, optional
+        Name of the shapefile attribute used to group polygons. Default
+        ``'ws_id'``.
+    Suffix : str, optional
+        Suffix used in the output shapefile name. Default ``''``.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per unique ``ws_id`` with columns ``mean``, ``min``,
+        ``max``, ``median``, ``sum`` plus geometry/id columns.
+
+    Raises
+    ------
+    RuntimeError
+        If the shapefile cannot be read, or the output shapefile cannot
+        be written.
     """
     try:
-        # Cargar el shapefile usando pyogrio como alternativa a Fiona
+        # Read the shapefile using pyogrio as a Fiona alternative.
         polygons = gpd.read_file(shapefile_path, engine='pyogrio')
     except Exception as e:
-        raise RuntimeError(f"Error al leer el shapefile: {e}")
+        raise RuntimeError(f"Error reading shapefile: {e}")
 
-    # Verificar que el shapefile y el raster tienen el mismo sistema de referencia
+    # Check that the shapefile and raster share the same CRS.
     with rasterio.open(raster_path) as src:
         raster_crs = src.crs
         nodata_value = src.nodatavals[0] if src.nodatavals and src.nodatavals[0] is not None else None
@@ -570,34 +772,34 @@ def calculate_zonal_stats(shapefile_path, raster_path, output_path_shp, ws_id="w
     if polygons.crs != raster_crs:
         polygons = polygons.to_crs(raster_crs)
 
-    # Calcular estadísticas zonales agrupadas por el atributo 'ws_id'
+    # Compute zonal statistics grouped by the 'ws_id' attribute.
     unique_ids = polygons[ws_id].unique()
     results = []
 
     for uid in unique_ids:
         subset = polygons[polygons[ws_id] == uid]
         stats = zonal_stats(
-            subset,  # Subconjunto del shapefile
-            raster_path,  # Archivo raster
+            subset,  # Shapefile subset
+            raster_path,  # Raster file
             stats=["mean", "min", "max", "median","sum"],
-            nodata=nodata_value, # Estadísticas deseadas
-            geojson_out=True  # Devuelve los resultados como GeoJSON
+            nodata=nodata_value,  # Desired statistics
+            geojson_out=True  # Return results as GeoJSON
         )
         stats_gdf = gpd.GeoDataFrame.from_features(stats)
         stats_gdf[ws_id] = uid
         results.append(stats_gdf)
 
-    # Combinar todos los resultados
+    # Combine all results.
     final_result = gpd.GeoDataFrame(pd.concat(results, ignore_index=True))
 
-    # Guardar los resultados en un nuevo shapefile
+    # Save results to a new shapefile.
     output_path = "Zonal_{}.shp".format(Suffix)
     try:
         final_result.to_file(os.path.join(output_path_shp, output_path), driver='ESRI Shapefile')
     except Exception as e:
-        raise RuntimeError(f"Error al guardar el shapefile de salida: {e}")
+        raise RuntimeError(f"Error writing output shapefile: {e}")
 
-    # Convertir los resultados a un DataFrame
+    # Convert results to a DataFrame.
     final_result = pd.DataFrame(final_result)
 
     return final_result
