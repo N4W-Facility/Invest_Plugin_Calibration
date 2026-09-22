@@ -37,6 +37,9 @@ for the pre-2026 codebase: see CONTRIBUTING.md.
 
 import logging
 import os
+import webbrowser
+from datetime import datetime
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
 
 import numpy as np
 import pandas as pd
@@ -561,6 +564,14 @@ MODEL_SPEC = spec.ModelSpec(
             path='FIGURES',
             about=gettext('Scatter plots comparing simulated vs observed values.'),
         ),
+        spec.FileOutput(
+            id='calibration_report',
+            path='REPORT',
+            about=gettext(
+                'Self-contained HTML report summarizing the run (inputs, '
+                'algorithm, parameter table, dotty plots, and how to '
+                'interpret them). Opens automatically when the run finishes.'),
+        ),
     ],
 )
 
@@ -666,6 +677,87 @@ def _build_user_data(model_name, mp):
         'Status_NDR_N': 1 if model_name == 'NDR_N' else 0,
         'Status_NDR_P': 1 if model_name == 'NDR_P' else 0,
     }
+
+
+# ---------------------------------------------------------------------------
+# HTML report helpers
+# ---------------------------------------------------------------------------
+_INPUT_LABELS = [
+    ('lulc_path',                     'Land Use / Land Cover'),
+    ('biophysical_table_path',        'Biophysical Table'),
+    ('calibration_watersheds_path',   'Calibration Watersheds'),
+    ('watersheds_path',               'Full Watersheds (Final Run)'),
+    ('sub_watersheds_path',           'Sub-Watersheds'),
+    ('precipitation_path',            'Annual Precipitation'),
+    ('eto_path',                      'Reference Evapotranspiration'),
+    ('depth_to_root_rest_layer_path', 'Root Restricting Layer Depth'),
+    ('pawc_path',                     'Plant Available Water Content'),
+    ('dem_path',                      'Digital Elevation Model'),
+    ('soil_group_path',               'Hydrologic Soil Group'),
+    ('eto_raster_table',              'Monthly ETP Raster Table'),
+    ('precip_raster_table',           'Monthly Precipitation Raster Table'),
+    ('rain_events_table_path',        'Rain Events Table'),
+    ('erosivity_path',                'Rainfall Erosivity (R factor)'),
+    ('erodibility_path',              'Soil Erodibility (K factor)'),
+]
+
+
+def _inputs_summary(mp):
+    """Return ``(label, path)`` pairs for the non-empty inputs of this run."""
+    return [(label, mp[key]) for key, label in _INPUT_LABELS if mp.get(key)]
+
+
+# Status_Cal_* column(s) required per model — see CALIBRATION_PROCESS.md §3.
+_STATUS_CAL_COLUMNS = {
+    'AWY':   ['Status_Cal_Kc'],
+    'SWY':   ['Status_Cal_Kc'],
+    'SDR':   ['Status_Cal_C', 'Status_Cal_P'],
+    'NDR_N': ['Status_Cal_Load_N', 'Status_Cal_Eff_N'],
+    'NDR_P': ['Status_Cal_Load_P', 'Status_Cal_Eff_P'],
+}
+
+
+def _status_cal_summary(biophysical_table_path, model_name):
+    """Count how many LULC rows are flagged for calibration per factor.
+
+    Returns
+    -------
+    list of (str, int, int)
+        ``(column_name, n_flagged, n_total)`` for each ``Status_Cal_*``
+        column relevant to ``model_name``. Empty list if the table or
+        columns cannot be read (kept non-fatal — this only feeds the
+        report, not the calibration itself).
+    """
+    cols = _STATUS_CAL_COLUMNS.get(model_name, [])
+    if not cols:
+        return []
+    try:
+        df = pd.read_csv(biophysical_table_path, encoding='latin-1')
+    except Exception:
+        LOGGER.exception('Could not read biophysical table for the report summary.')
+        return []
+    summary = []
+    for col in cols:
+        if col in df.columns:
+            n_total = len(df)
+            n_flagged = int((df[col] == 1).sum())
+            summary.append((col, n_flagged, n_total))
+    return summary
+
+
+def _invest_version():
+    """Return the installed ``natcap.invest`` version, or ``'unknown'``."""
+    try:
+        return _pkg_version('natcap.invest')
+    except PackageNotFoundError:
+        return 'unknown'
+
+
+_METHOD_SHORT = {
+    'Dynamical dimensional search (DDS)':   'DDS',
+    'Shuffled Complex Evolution (SCE-UA)':  'SCE-UA',
+    'Latin Hypercube Sampling (LHS)':       'LHS',
+}
 
 
 # ---------------------------------------------------------------------------
@@ -1493,6 +1585,8 @@ def execute(args):
     LOGGER.info('InVEST Calibration Assistant')
     LOGGER.info('=' * 60)
 
+    start_time = datetime.now()
+
     workspace  = args['workspace_dir']
     model_name = args['model_name']
     metric     = args['evaluation_metric']
@@ -1638,9 +1732,11 @@ def execute(args):
     }.get(model_name)
 
     best_params = None
+    best_metric_value = None
     if _plot_fn is not None:
         try:
-            best_params = _plot_fn(workspace, project_name, fo_label, workspace, factor_metric)
+            best_params, best_metric_value = _plot_fn(
+                workspace, project_name, fo_label, workspace, factor_metric)
         except Exception:
             LOGGER.exception(
                 'Could not generate calibration plots / determine the best-fit '
@@ -1649,6 +1745,7 @@ def execute(args):
     # ------------------------------------------------------------------
     # 9. Final run with best-fit parameters
     # ------------------------------------------------------------------
+    used_fallback = not best_params
     if best_params:
         LOGGER.info(f'Best-fit parameters found by calibration: {best_params}')
         final_params_val = {**params_val, **best_params}
@@ -1660,6 +1757,38 @@ def execute(args):
 
     LOGGER.info('Running InVEST with best-fit parameters …')
     _run_best_params(workspace, model_name, mp, user_data, final_params_val, si)
+
+    # ------------------------------------------------------------------
+    # 10. Build and open the HTML calibration report
+    # ------------------------------------------------------------------
+    end_time = datetime.now()
+    try:
+        report_path = si.Build_HTML_Report(
+            ProjectPath=workspace,
+            Suffix=project_name,
+            ModelName=model_name,
+            MethodShort=_METHOD_SHORT.get(method, method),
+            MetricShort=fo_label,
+            NSim=n_sim,
+            StartTime=start_time,
+            EndTime=end_time,
+            InvestVersion=_invest_version(),
+            InputsSummary=_inputs_summary(mp),
+            ParamsMin=params_min,
+            ParamsMax=params_max,
+            ParamsVal=params_val,
+            FinalParams=final_params_val,
+            BestMetricValue=best_metric_value,
+            UsedFallback=used_fallback,
+            StatusCalSummary=_status_cal_summary(mp['biophysical_table_path'], model_name),
+        )
+        LOGGER.info(f'Calibration report written to: {report_path}')
+        try:
+            webbrowser.open('file://' + os.path.abspath(report_path))
+        except Exception:
+            LOGGER.exception('Could not open the calibration report automatically.')
+    except Exception:
+        LOGGER.exception('Could not build the HTML calibration report.')
 
     LOGGER.info('=' * 60)
     LOGGER.info(f'Calibration complete: {model_name}')
