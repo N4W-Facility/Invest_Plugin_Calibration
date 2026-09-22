@@ -1163,7 +1163,6 @@ def _execute_swy_direct(workspace, mp, user_data, vector, metric_name, factor_me
 
     out_dir  = os.path.join(workspace, 'OUTPUTS', '02-SWY')
     suffix   = user_data['Suffix']
-    tmp_dir  = os.path.join(workspace, 'TMP')
 
     swy_args = {
         'lulc_raster_path':              mp['lulc_path'],
