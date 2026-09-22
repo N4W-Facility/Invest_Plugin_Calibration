@@ -49,6 +49,8 @@ from natcap.invest import spec
 from natcap.invest import validation
 from natcap.invest.unit_registry import u
 
+from . import Report_InVEST
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -718,15 +720,18 @@ _STATUS_CAL_COLUMNS = {
 
 
 def _status_cal_summary(biophysical_table_path, model_name):
-    """Count how many LULC rows are flagged for calibration per factor.
+    """Identify which LULC rows are flagged for calibration per factor.
 
     Returns
     -------
-    list of (str, int, int)
-        ``(column_name, n_flagged, n_total)`` for each ``Status_Cal_*``
-        column relevant to ``model_name``. Empty list if the table or
-        columns cannot be read (kept non-fatal — this only feeds the
-        report, not the calibration itself).
+    list of (str, int, int, list of (str, str))
+        ``(column_name, n_flagged, n_total, classes)`` for each
+        ``Status_Cal_*`` column relevant to ``model_name``, where
+        ``classes`` is the ``(lucode, description)`` pairs of the LULC
+        rows flagged ``1`` (i.e. the land-cover classes actually
+        calibrated by that factor). Empty list if the table or columns
+        cannot be read (kept non-fatal — this only feeds the report, not
+        the calibration itself).
     """
     cols = _STATUS_CAL_COLUMNS.get(model_name, [])
     if not cols:
@@ -736,12 +741,23 @@ def _status_cal_summary(biophysical_table_path, model_name):
     except Exception:
         LOGGER.exception('Could not read biophysical table for the report summary.')
         return []
+    lucode_col = 'lucode' if 'lucode' in df.columns else None
+    desc_col = 'description' if 'description' in df.columns else None
     summary = []
     for col in cols:
-        if col in df.columns:
-            n_total = len(df)
-            n_flagged = int((df[col] == 1).sum())
-            summary.append((col, n_flagged, n_total))
+        if col not in df.columns:
+            continue
+        n_total = len(df)
+        flagged = df[df[col] == 1]
+        n_flagged = len(flagged)
+        if lucode_col:
+            classes = list(zip(
+                flagged[lucode_col].astype(str),
+                flagged[desc_col].astype(str) if desc_col else [''] * n_flagged,
+            ))
+        else:
+            classes = []
+        summary.append((col, n_flagged, n_total, classes))
     return summary
 
 
@@ -1763,7 +1779,7 @@ def execute(args):
     # ------------------------------------------------------------------
     end_time = datetime.now()
     try:
-        report_path = si.Build_HTML_Report(
+        report_path = Report_InVEST.Build_HTML_Report(
             ProjectPath=workspace,
             Suffix=project_name,
             ModelName=model_name,
@@ -1780,7 +1796,7 @@ def execute(args):
             FinalParams=final_params_val,
             BestMetricValue=best_metric_value,
             UsedFallback=used_fallback,
-            StatusCalSummary=_status_cal_summary(mp['biophysical_table_path'], model_name),
+            StatusCalDetail=_status_cal_summary(mp['biophysical_table_path'], model_name),
         )
         LOGGER.info(f'Calibration report written to: {report_path}')
         try:
