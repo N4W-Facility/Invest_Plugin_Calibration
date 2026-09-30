@@ -35,7 +35,7 @@ _MODEL_FULL_NAME = {
 }
 
 _MODEL_UNIT_PLAIN = {
-    'AWY':   'm³/s',
+    'AWY':   'm³/year',
     'SWY':   'mm',
     'SDR':   'ton/year',
     'NDR_N': 'kg/year',
@@ -270,7 +270,14 @@ def Build_HTML_Report(ProjectPath, Suffix, ModelName, MethodShort, MetricShort,
             'Check the EVALUATIONS/ logs for failed iterations before trusting this result.</div>'
         )
 
-    best_metric_str = f'{BestMetricValue:.4g} {unit}' if BestMetricValue is not None else 'n/a'
+    # Metric unit: squared for MSE, dimensionless for RRMSE.
+    if MetricShort == 'RRMSE':
+        metric_unit = ''
+    elif MetricShort == 'MSE':
+        metric_unit = f'({unit})²'
+    else:
+        metric_unit = unit
+    best_metric_str = f'{BestMetricValue:.4g} {metric_unit}'.strip() if BestMetricValue is not None else 'n/a'
 
     html = f'''<!DOCTYPE html>
 <html lang="en">

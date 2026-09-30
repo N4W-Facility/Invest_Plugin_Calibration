@@ -251,22 +251,20 @@ def _style_axis(ax, fontsize=16):
     ax.set_axisbelow(True)
     ax.tick_params(labelsize=fontsize - 3, colors='#404040')
 
-# Per-model plot configuration: unit label, time conversion factor (only AWY
-# reports Obs/Sim/Metric in per-second and needs converting to per-year),
-# and the (result key, axis label) pairs in the same column order used by
-# each model's EVALUATIONS/*_Metric_{Suffix}.csv file.
+# Per-model plot configuration: unit of the calibrated variable (mathtext,
+# kept in the model's native output units so Obs, Sim and Metric are never
+# rescaled), and the (result key, axis label) pairs in the same column order
+# used by each model's EVALUATIONS/*_Metric_{Suffix}.csv file.
 _MODEL_PLOT_CONFIG = {
     'AWY': {
-        'unit': r'$(\mathrm{m}^3/\mathrm{s})$',
-        'time_scale': 1 / (3600 * 24 * 365),
+        'unit': r'\mathrm{m}^3/year',
         'params': [
             ('Z', r'$Z$'),
             ('Factor-Kc', r'Factor$_{K_c}$'),
         ],
     },
     'SWY': {
-        'unit': r'$(mm)$',
-        'time_scale': 1,
+        'unit': r'mm',
         'params': [
             ('Alpha', r'$\alpha$'),
             ('Beta', r'$\beta$'),
@@ -275,8 +273,7 @@ _MODEL_PLOT_CONFIG = {
         ],
     },
     'SDR': {
-        'unit': r'$(ton/year)$',
-        'time_scale': 1,
+        'unit': r'ton/year',
         'params': [
             ('sdr_max', r'SDR$_{max}$'),
             ('Borselli-K_SDR', r'$K$'),
@@ -287,8 +284,7 @@ _MODEL_PLOT_CONFIG = {
         ],
     },
     'NDR_N': {
-        'unit': r'$(kg/year)$',
-        'time_scale': 1,
+        'unit': r'kg/year',
         'params': [
             ('SubCri_Len_N', r'SubCri$_{Len_N}$'),
             ('Sub_Eff_N', r'Sub$_{Eff_N}$'),
@@ -298,8 +294,7 @@ _MODEL_PLOT_CONFIG = {
         ],
     },
     'NDR_P': {
-        'unit': r'$(kg/year)$',
-        'time_scale': 1,
+        'unit': r'kg/year',
         'params': [
             ('SubCri_Len_P', r'SubCri$_{Len_P}$'),
             ('Sub_Eff_P', r'Sub$_{Eff_P}$'),
@@ -309,6 +304,18 @@ _MODEL_PLOT_CONFIG = {
         ],
     },
 }
+
+def _metric_unit_label(unit, NameMetric):
+    """Return the mathtext unit label of a metric, given the variable's unit.
+
+    MSE is in squared units, RRMSE is dimensionless (empty label), and
+    MAE/RMSE share the variable's unit.
+    """
+    if NameMetric == 'RRMSE':
+        return ''
+    if NameMetric == 'MSE':
+        return rf'$(({unit})^2)$'
+    return rf'$({unit})$'
 
 def _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, ModelName):
     """Build the calibration figure for one model and return its best-fit parameters.
@@ -348,8 +355,8 @@ def _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, ModelName):
         (e.g. RMSE) achieved by that best-fit run.
     """
     cfg         = _MODEL_PLOT_CONFIG[ModelName]
-    unit        = cfg['unit']
-    time_scale  = cfg['time_scale']
+    unit        = rf"$({cfg['unit']})$"
+    metric_unit = _metric_unit_label(cfg['unit'], NameMetric)
     param_keys, param_labels = zip(*cfg['params'])
     n_params    = len(param_keys)
 
@@ -357,7 +364,7 @@ def _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, ModelName):
     FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'{ModelName}_Metric_{Suffix}.csv')
     Tmp         = np.loadtxt(FileName, delimiter=',', skiprows=1)
     Params      = Tmp[:, :n_params]
-    Metric      = Tmp[:, n_params] * time_scale
+    Metric      = Tmp[:, n_params]
 
     # Observed
     FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'{ModelName}_Obs_{Suffix}.csv')
@@ -365,14 +372,14 @@ def _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, ModelName):
     NGauges     = len(Obs) // len(Metric)
     Obs         = Obs.reshape(len(Metric), NGauges)
     Obs         = Obs.transpose()
-    Obs         = Obs[:, 0] * time_scale
+    Obs         = Obs[:, 0]
     Obs         = Obs.reshape(NGauges, 1)
 
     # Simulation
     FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'{ModelName}_Sim_{Suffix}.csv')
     Sim         = np.loadtxt(FileName, delimiter=',', skiprows=1)
     Sim         = Sim.reshape(len(Metric), len(Sim) // len(Metric))
-    Sim         = Sim.transpose() * time_scale
+    Sim         = Sim.transpose()
 
     # Best parameters.
     # Metric already has FactorMetric applied (FactorMetric*RMSE), so
@@ -402,7 +409,7 @@ def _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, ModelName):
     ax.scatter(Obs, Sim[:, id_min], s=100, edgecolor=_DOT_EDGE, facecolor=_DOT_FACE, alpha=0.9, linewidth=1.2, zorder=2)
     ax.set_xlabel(f'Observed {unit}', fontsize=16)
     ax.set_ylabel(f'Simulated {unit}', fontsize=16)
-    ax.set_title(f'{NameMetric} = {round(BestAREM, 2)} {unit}', fontsize=16, pad=10)
+    ax.set_title(f'{NameMetric} = {BestAREM:.4g} {metric_unit}', fontsize=16, pad=10)
     _style_axis(ax)
 
     # Dotty plots, one per calibrated parameter
@@ -411,7 +418,7 @@ def _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, ModelName):
         ax.scatter(Params[:, i], Metric, s=30, edgecolor=_DOT_EDGE, facecolor=_DOT_FACE, alpha=0.6, linewidth=0.8, zorder=2)
         ax.scatter(BestParams[i], BestAREM, s=60, color=_BEST_COLOR, edgecolor='black', linewidth=0.6, zorder=3)
         ax.set_xlabel(label, fontsize=16)
-        ax.set_ylabel(f'{NameMetric} {unit}', fontsize=16)
+        ax.set_ylabel(f'{NameMetric} {metric_unit}', fontsize=16)
         ax.set_title(f'{label} = {BestParams[i]:.4g}', fontsize=16, pad=10)
         _style_axis(ax)
 
