@@ -420,14 +420,14 @@ MODEL_SPEC = spec.ModelSpec(
                 spec.NumberInput(
                     id='AWY',
                     name=gettext('AWY'),
-                    about=gettext('Observed streamflow for AWY calibration (m³/year)'),
+                    about=gettext('Observed annual water yield volume for AWY calibration (m³/year)'),
                     units=None,
                     required=False,
                 ),
                 spec.NumberInput(
                     id='SWY',
                     name=gettext('SWY'),
-                    about=gettext('Observed streamflow for SWY calibration (mm/year)'),
+                    about=gettext('Observed basin-average annual actual evapotranspiration (AET) for SWY calibration (mm/year)'),
                     units=None,
                     required=False,
                 ),

@@ -88,7 +88,8 @@ Dummy_InVEST/
 ├── AWY_args.json            ← ready-to-load Workbench configurations
 ├── SWY_args.json
 ├── SDR_args.json
-├── NDR_args.json            ← loads NDR_N; switch the model to NDR_P for phosphorus
+├── NDR_args.json            ← NDR_N
+├── NDR_P_args.json          ← NDR_P
 └── INPUTS/
     ├── 01-Biophysical_Table.csv   biophysical table with Status_Cal_* columns
     ├── Parameters_Table.csv       search ranges for all models
@@ -109,7 +110,7 @@ Dummy_InVEST/
 1. Unzip the dataset anywhere on your machine.
 2. In the plugin, use **Load parameters from file** and pick one of the `*_args.json` files.
 3. All paths in the JSON files are **relative to the JSON file** and the workspace is `.`, so the form fills in correctly wherever you unzipped the folder. Results are written into `Dummy_InVEST/` itself.
-4. For phosphorus, load `NDR_args.json` and change **Name Of The Model To Calibrate** to `NDR_P`.
+4. Each configuration uses its own suffix (`Tester_AWY`, `Tester_SWY`, `Tester_SDR`, `Tester_NDR_N`, `Tester_NDR_P`), so all five models can run in the same folder without overwriting each other's suffixed files.
 5. Click **Run**. The HTML report opens automatically when the run finishes.
 
 The JSON files are also a good **reference** for your own projects: they show exactly which fields each model needs and what a valid value looks like.
@@ -181,7 +182,7 @@ Alpha,SWY,0.083,0.083,0.083
 | `Min`, `Max` | Search range. **Set `Min = Max` to hold a parameter fixed.** |
 | `Value` | Initial guess. It is reported as `Initial` and is used **only if the calibration produces no valid best fit**. |
 
-> **Tip:** fill in `Value` with a sensible number. The dummy table uses `-999`. That is fine while the calibration succeeds, but if no best fit is found the final run would use `-999`.
+> **Tip:** always fill in `Value` with a physically sensible number (the dummy table uses `1` for factors, i.e. no change, and InVEST defaults clipped to the range for the rest). A placeholder such as `-999` would be used as-is by the final run if no best fit is found.
 
 Parameter keys:
 

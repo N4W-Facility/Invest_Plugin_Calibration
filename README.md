@@ -11,7 +11,7 @@
 
 The **InVEST Calibration Assistant** is a plugin for the [InVEST Workbench](https://naturalcapitalproject.stanford.edu/software/invest) that automates the calibration of InVEST hydrological models.
 
-Given a set of observed field measurements (streamflow, sediment, nutrients) and a search range for each model parameter, the plugin iteratively runs the selected InVEST model, evaluates how well each parameter combination reproduces the observations, and finds the best-fitting set of parameters — all from within the Workbench UI.
+Given a set of observed field measurements (water yield, evapotranspiration, sediment, nutrients) and a search range for each model parameter, the plugin iteratively runs the selected InVEST model, evaluates how well each parameter combination reproduces the observations, and finds the best-fitting set of parameters — all from within the Workbench UI.
 
 No scripting or external tools are required.
 
@@ -23,9 +23,9 @@ No scripting or external tools are required.
 |-------|-----------|-----------------------|
 | **AWY** | Annual Water Yield | `Z`, `Factor-Kc` |
 | **SWY** | Seasonal Water Yield | `Alpha`, `Beta`, `Gamma`, `Factor-Kc_m` |
-| **SDR** | Sediment Delivery Ratio | `sdr_max`, `Borselli-K`, `IC0`, `L_max`, `Factor-C`, `Factor-P` |
-| **NDR\_N** | Nutrient Delivery Ratio – Nitrogen | `SubCri_Len_N`, `Sub_Eff_N`, `Borselli-K`, `Factor_Load_N`, `Factor_Eff_N` |
-| **NDR\_P** | Nutrient Delivery Ratio – Phosphorus | `Borselli-K`, `Factor_Load_P`, `Factor_Eff_P` |
+| **SDR** | Sediment Delivery Ratio | `sdr_max`, `Borselli-K_SDR`, `Borselli-IC0`, `L_max`, `Factor-C`, `Factor-P` |
+| **NDR\_N** | Nutrient Delivery Ratio – Nitrogen | `SubCri_Len_N`, `Sub_Eff_N`, `Borselli-K_NDR`, `Factor_Load_N`, `Factor_Eff_N` |
+| **NDR\_P** | Nutrient Delivery Ratio – Phosphorus | `Borselli-K_NDR`, `Factor_Load_P`, `Factor_Eff_P` |
 
 ---
 
@@ -67,8 +67,8 @@ ws_id,AWY,SWY,SDR,NDR_N,NDR_P
 | Column | Units | Description |
 |--------|-------|-------------|
 | `ws_id` | integer | Watershed ID (must match shapefile attribute) |
-| `AWY` | m³/year | Observed annual streamflow |
-| `SWY` | mm/year | Observed seasonal streamflow |
+| `AWY` | m³/year | Observed annual water yield volume |
+| `SWY` | mm/year | Observed basin-average annual actual evapotranspiration (AET) |
 | `SDR` | tonnes/year | Observed sediment export |
 | `NDR_N` | kg/year | Observed nitrogen load |
 | `NDR_P` | kg/year | Observed phosphorus load |
