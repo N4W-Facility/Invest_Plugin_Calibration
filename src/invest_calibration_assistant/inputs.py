@@ -271,8 +271,6 @@ def _read_param_ranges(parameter_search_ranges_path):
         'Sub_Eff_N':      'Sub_Eff_N',
         'Factor_Load_P':  'Factor_Load_P',
         'Factor_Eff_P':   'Factor_Eff_P',
-        'SubCri_Len_P':   'SubCri_Len_P',
-        'Sub_Eff_P':      'Sub_Eff_P',
         'Borselli-K_SDR': 'Borselli-K_SDR',
         'Borselli-K_NDR': 'Borselli-K_NDR',
     }
@@ -315,7 +313,9 @@ def _build_spotpy_params(model_name, params_min, params_max):
         'SWY':   ['Alpha', 'Beta', 'Gamma', 'Factor-Kc_m'],
         'SDR':   ['sdr_max', 'Borselli-K_SDR', 'IC0', 'L_max', 'Factor-C', 'Factor-P'],
         'NDR_N': ['SubCri_Len_N', 'Sub_Eff_N', 'Borselli-K_NDR', 'Factor_Load_N', 'Factor_Eff_N'],
-        'NDR_P': ['SubCri_Len_P', 'Sub_Eff_P', 'Borselli-K_NDR', 'Factor_Load_P', 'Factor_Eff_P'],
+        # InVEST 3.20 has no subsurface pathway for P, so NDR_P has no
+        # SubCri_Len_P / Sub_Eff_P to calibrate.
+        'NDR_P': ['Borselli-K_NDR', 'Factor_Load_P', 'Factor_Eff_P'],
     }
 
     return [

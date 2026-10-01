@@ -46,7 +46,7 @@ Before any parameter table means anything, it must be clear exactly *what number
 
 - **SDR** separates two physically distinct quantities that are easy to conflate. **Gross erosion** is the potential soil loss computed pixel-by-pixel from the USLE factors (`usle_c`, `usle_p`, rainfall erosivity, soil erodibility, slope length) — how much soil is detached upslope. The **delivery ratio** (governed by `sdr_max`, `Borselli-K`, `IC0`) is the fraction of that gross erosion that survives hillslope routing and redeposition to actually reach the stream network. `sed_export` — the value the plugin reads and compares against `Obs_Data.csv` — is *already* the delivered quantity, i.e. gross erosion multiplied by the connectivity-dependent delivery ratio, expressed as a mass per year (t yr⁻¹). The observed side must match that definition: a suspended-sediment **export** at the gauge, in mass per year — not a gross-erosion estimate from an erosion-plot study, and not an instantaneous turbidity or TSS concentration reading.
 
-- **NDR_N / NDR_P** follow the identical logic for nutrients. A gross load is assigned per pixel (`load_n`/`load_p`, or an application rate, depending on `load_type_n`/`load_type_p`), and a retention efficiency along the surface and subsurface flow path (governed by `Sub_Eff_N`/`Sub_Eff_P`, `SubCri_Len_N`/`SubCri_Len_P`, and the Borselli connectivity constant) determines how much of that gross load is retained versus delivered. `n_total_export`/`p_surface_export` — again, what the plugin compares against `Obs_Data.csv` — are the **delivered** loads reaching the stream, in mass per year (kg yr⁻¹), not the gross load applied to the landscape and not a nutrient concentration.
+- **NDR_N / NDR_P** follow the identical logic for nutrients. A gross load is assigned per pixel (`load_n`/`load_p`, or an application rate, depending on `load_type_n`/`load_type_p`), and a retention efficiency along the flow path (governed by the Borselli connectivity constant and, for nitrogen only, the subsurface parameters `Sub_Eff_N`/`SubCri_Len_N` — InVEST models no subsurface pathway for phosphorus) determines how much of that gross load is retained versus delivered. `n_total_export`/`p_surface_export` — again, what the plugin compares against `Obs_Data.csv` — are the **delivered** loads reaching the stream, in mass per year (kg yr⁻¹), not the gross load applied to the landscape and not a nutrient concentration.
 
 **Practical consequence.** Water-quality monitoring programs frequently report concentrations (mg L⁻¹ of TSS, total N, or total P) rather than annual loads. Entering a raw concentration value into `Obs_Data.csv` is a unit and conceptual mismatch that the plugin has no way to detect — it will run the calibration anyway, silently comparing a mass-per-year simulated quantity against a mass-per-volume observed number, and the optimizer will search for whatever `θ` numerically minimizes that meaningless difference. Concentration data must first be converted to an annual export load. For a mean concentration `C` (mg L⁻¹) and a mean discharge `Q` (m³ s⁻¹) over the period of record:
 
@@ -97,9 +97,9 @@ Now suppose the initial, uncalibrated run (using the literature `usle_c` values 
 | **SWY** | Seasonal Water Yield | `Alpha`, `Beta`, `Gamma` | `Factor-Kc_m` |
 | **SDR** | Sediment Delivery Ratio | `sdr_max`, `Borselli-K`, `IC0`, `L_max` | `Factor-C`, `Factor-P` |
 | **NDR_N** | Nutrient Delivery Ratio – Nitrogen | `SubCri_Len_N`, `Sub_Eff_N`, `Borselli-K` | `Factor_Load_N`, `Factor_Eff_N` |
-| **NDR_P** | Nutrient Delivery Ratio – Phosphorus | `SubCri_Len_P`, `Sub_Eff_P`, `Borselli-K` | `Factor_Load_P`, `Factor_Eff_P` |
+| **NDR_P** | Nutrient Delivery Ratio – Phosphorus | `Borselli-K` | `Factor_Load_P`, `Factor_Eff_P` |
 
-`SubCri_Len_P`/`Sub_Eff_P` mirror `SubCri_Len_N`/`Sub_Eff_N` structurally — InVEST's subsurface critical flow-path length and subsurface retention efficiency, applied to the phosphorus branch of NDR. A prior implementation defect fed these two arguments from `Factor_Load_P`/`Factor_Eff_P` (the biophysical-table coefficients) instead of their own dedicated parameters; this has been corrected. Results from a calibration run predating that fix used the wrong physical quantities for these two arguments and should be discarded.
+NDR_P calibrates no subsurface parameters: InVEST 3.20 exposes `subsurface_critical_length_n`/`subsurface_eff_n` for nitrogen only and models no subsurface pathway for phosphorus. Earlier versions of this plugin sampled `SubCri_Len_P`/`Sub_Eff_P` and passed them to InVEST, which ignored them; they have been removed so the search budget is spent only on parameters that affect the result.
 
 | Parameter | Description | Typical range |
 |-----------|-------------|----------------|
@@ -120,13 +120,11 @@ Now suppose the initial, uncalibrated run (using the literature `usle_c` values 
 | `Borselli-K` (NDR) | Borselli connectivity constant | 0.5 – 10.0 |
 | `Factor_Load_N` | Scales the `load_n` column | 0.5 – 2.0 |
 | `Factor_Eff_N` | Scales the `eff_n` column (capped at 1.0) | 0.5 – 1.25¹ |
-| `SubCri_Len_P` | Subsurface critical flow-path length, P (m) | 30 – 500² |
-| `Sub_Eff_P` | Subsurface retention efficiency, P | 0.0 – 0.8² |
 | `Factor_Load_P` | Scales the `load_p` column | 0.5 – 2.0 |
 | `Factor_Eff_P` | Scales the `eff_p` column (capped at 1.0) | 0.5 – 1.49¹ |
 
 > ¹ The theoretical upper bound is a function of the table itself: `Factor_max = 1.0 / max(eff_n)` (or `eff_p`) — any value above that guarantees at least one row exceeds unity before the clamp described in [section 4](#4-bound-enforcement-and-physical-admissibility) intervenes.
-> ² These ranges are provisional, mirroring the nitrogen parameters. Phosphorus is known to adsorb more strongly to soil particles and is generally less mobile in the subsurface than nitrate-nitrogen; treat these as a starting point to be revised against site-specific or regional literature, not as a validated default.
+> NDR_P has no subsurface parameters: InVEST 3.20 models phosphorus transport along the surface pathway only, so there is no `SubCri_Len_P` / `Sub_Eff_P` to calibrate.
 
 **Observed variable and InVEST output consumed, per model:**
 

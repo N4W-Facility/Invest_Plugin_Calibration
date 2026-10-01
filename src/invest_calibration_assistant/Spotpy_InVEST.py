@@ -296,8 +296,6 @@ _MODEL_PLOT_CONFIG = {
     'NDR_P': {
         'unit': r'kg/year',
         'params': [
-            ('SubCri_Len_P', r'SubCri$_{Len_P}$'),
-            ('Sub_Eff_P', r'Sub$_{Eff_P}$'),
             ('Borselli-K_NDR', r'Borselli$_{K}$'),
             ('Factor_Load_P', r'Factor$_{Load_P}$'),
             ('Factor_Eff_P', r'Factor$_{Eff_P}$'),

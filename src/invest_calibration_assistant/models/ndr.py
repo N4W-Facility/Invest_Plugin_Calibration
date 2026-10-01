@@ -41,7 +41,7 @@ def run_iteration(workspace, mp, user_data, vector, metric_name, factor_metric, 
         Candidate parameter vector. For ``NDR_N``:
         ``[SubCri_Len_N, Sub_Eff_N, Borselli-K_NDR, Factor_Load_N, Factor_Eff_N]``.
         For ``NDR_P``:
-        ``[SubCri_Len_P, Sub_Eff_P, Borselli-K_NDR, Factor_Load_P, Factor_Eff_P]``.
+        ``[Borselli-K_NDR, Factor_Load_P, Factor_Eff_P]``.
     metric_name : str
         Objective function name, as used by ``Spotpy_InVEST.Cal_FunObj``.
     factor_metric : float
@@ -79,17 +79,14 @@ def run_iteration(workspace, mp, user_data, vector, metric_name, factor_metric, 
                      'subsurface_eff_n':             '%.2f' % sub_eff_n}
     else:  # NDR_P
         # Vector order matches inputs._build_spotpy_params:
-        # SubCri_Len_P, Sub_Eff_P, Borselli-K_NDR, Factor_Load_P, Factor_Eff_P
-        subcri_p, sub_eff_p, k_ndr, load_p, eff_p = (float(vector[i]) for i in range(5))
+        # Borselli-K_NDR, Factor_Load_P, Factor_Eff_P
+        # (InVEST models no subsurface pathway for P.)
+        k_ndr, load_p, eff_p = (float(vector[i]) for i in range(3))
         params = {
-            'SubCri_Len_P': subcri_p, 'Sub_Eff_P': sub_eff_p,
             'Borselli-K_NDR': k_ndr, 'Factor_Load_P': load_p, 'Factor_Eff_P': eff_p,
         }
-        LOGGER.info(f'NDR_P  SubCri={subcri_p:.2f}  SubEff={sub_eff_p:.2f}  '
-                    f'K={k_ndr:.2f}  Load={load_p:.2f}  Eff={eff_p:.2f}')
-        ndr_extra = {'calc_n': False, 'calc_p': True,
-                     'subsurface_critical_length_p': '%.2f' % subcri_p,
-                     'subsurface_eff_p':             '%.2f' % sub_eff_p}
+        LOGGER.info(f'NDR_P  K={k_ndr:.2f}  Load={load_p:.2f}  Eff={eff_p:.2f}')
+        ndr_extra = {'calc_n': False, 'calc_p': True}
 
     table = si.Factor_BioTable(mp['biophysical_table_path'], params, user_data)
     if model_name == 'NDR_N' and 'load_type_n' not in table.columns:
@@ -139,8 +136,8 @@ def run_iteration(workspace, mp, user_data, vector, metric_name, factor_metric, 
         hdr   = f'SubCri_Len_N,Sub_Eff_N,Borselli-K,Factor_Load_N,Factor_Eff_N,{metric_name}'
         p_row = f'{subcri_n:.2f},{sub_eff_n:.2f},{k_ndr:.2f},{load_n:.2f},{eff_n:.2f},{metric:.6g}'
     else:
-        hdr   = f'SubCri_Len_P,Sub_Eff_P,Borselli-K,Factor_Load_P,Factor_Eff_P,{metric_name}'
-        p_row = f'{subcri_p:.2f},{sub_eff_p:.2f},{k_ndr:.2f},{load_p:.2f},{eff_p:.2f},{metric:.6g}'
+        hdr   = f'Borselli-K,Factor_Load_P,Factor_Eff_P,{metric_name}'
+        p_row = f'{k_ndr:.2f},{load_p:.2f},{eff_p:.2f},{metric:.6g}'
 
     _save_iteration(workspace, model_name, user_data['Suffix'], hdr, p_row, ws_ids, obs_val, sim_val)
     return obj
@@ -214,9 +211,6 @@ def run_final(workspace, mp, user_data, params_val, si, model_name):
     if is_n:
         invest_args['subsurface_critical_length_n'] = '%.2f' % params_val.get('SubCri_Len_N', 150)
         invest_args['subsurface_eff_n']             = '%.2f' % params_val.get('Sub_Eff_N', 0.8)
-    else:
-        invest_args['subsurface_critical_length_p'] = '%.2f' % params_val.get('SubCri_Len_P', 150)
-        invest_args['subsurface_eff_p']             = '%.2f' % params_val.get('Sub_Eff_P', 0.8)
     if sub_ws:
         invest_args['sub_watersheds_path'] = sub_ws
     _ndr.execute(invest_args)

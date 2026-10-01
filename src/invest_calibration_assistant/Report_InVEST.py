@@ -60,8 +60,6 @@ _PARAM_PLAIN_LABELS = {
     'Borselli-K_NDR': 'Borselli-K — connectivity constant',
     'Factor_Load_N':  'Factor_Load_N — scales the load_n column',
     'Factor_Eff_N':   'Factor_Eff_N — scales the eff_n column',
-    'SubCri_Len_P':   'SubCri_Len_P — subsurface critical flow-path length (m)',
-    'Sub_Eff_P':      'Sub_Eff_P — subsurface retention efficiency',
     'Factor_Load_P':  'Factor_Load_P — scales the load_p column',
     'Factor_Eff_P':   'Factor_Eff_P — scales the eff_p column',
 }
