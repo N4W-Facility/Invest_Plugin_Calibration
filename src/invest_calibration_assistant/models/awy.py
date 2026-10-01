@@ -10,7 +10,8 @@ import os
 
 import pandas as pd
 
-from ..iteration_io import _save_iteration, _score_against_obs, _write_temp_biotable
+from ..iteration_io import (_calibrated_biotable_name, _save_iteration, _score_against_obs,
+                            _write_temp_biotable)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -102,7 +103,8 @@ def run_iteration(workspace, mp, user_data, vector, metric_name, factor_metric, 
 def run_final(workspace, mp, user_data, params_val, si):
     """Run AWY once with the best-fit parameters (final, full-watershed run).
 
-    Builds the final biophysical table from ``params_val``, then calls
+    Builds the calibrated biophysical table from ``params_val`` (saved as
+    ``PARAMETERS/<MODEL>_BioTable_Calibrated_<suffix>.csv``), then calls
     ``natcap.invest.annual_water_yield`` with the full (non-calibration)
     watershed set, writing results to ``OUTPUTS/AWY_best``.
 
@@ -133,7 +135,7 @@ def run_final(workspace, mp, user_data, params_val, si):
     suffix  = user_data['Suffix']
 
     table = si.Factor_BioTable(mp['biophysical_table_path'], params_val, user_data)
-    tmp_bio = os.path.join(out_dir, 'AWY_BioTable_best.csv')
+    tmp_bio = os.path.join(workspace, 'PARAMETERS', _calibrated_biotable_name('AWY', suffix))
     table.to_csv(tmp_bio, index=False)
     sub_ws  = mp.get('sub_watersheds_path', '')
 

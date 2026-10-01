@@ -11,6 +11,9 @@
 # reading the code:
 #   - PARAMETERS/<MODEL>_BestParams_<suffix>.csv: final parameter table,
 #     reusable as the parameter search-range input of a refined run.
+#   - PARAMETERS/<MODEL>_BioTable_Calibrated_<suffix>.csv (written by
+#     models/*.py run_final, documented here): biophysical table with the
+#     calibrated factors applied.
 #   - EVALUATIONS/README_<MODEL>_<suffix>.md: what every row/column of the
 #     Metric/Obs/Sim CSVs means, how they join, units and data sources.
 #   - README_<MODEL>_<suffix>.md (workspace root): folder map, what to open
@@ -21,7 +24,7 @@ import os
 
 import pandas as pd
 
-from .iteration_io import _eval_csv_names
+from .iteration_io import _calibrated_biotable_name, _eval_csv_names, _last_iter_biotable_name
 from .Report_InVEST import _MODEL_FULL_NAME, _MODEL_UNIT_PLAIN, _param_description_unit
 
 # Where each model's simulated value comes from, and which column of the
@@ -373,6 +376,7 @@ def Build_Workspace_Readme(ProjectPath, Suffix, ModelName, MethodShort, MetricSh
     metric_name, obs_name, sim_name = _eval_csv_names(ModelName, Suffix)
     params_name = _best_params_name(ModelName, Suffix)
     params_path = os.path.join(ProjectPath, 'PARAMETERS', params_name)
+    biotable_name = _calibrated_biotable_name(ModelName, Suffix)
     spotpy_db   = f'{ModelName}_{_SPOTPY_DB_SUFFIX.get(MethodShort, MethodShort)}.csv'
     eval_readme = f'README_{ModelName}_{Suffix}.md'
 
@@ -413,9 +417,11 @@ def Build_Workspace_Readme(ProjectPath, Suffix, ModelName, MethodShort, MetricSh
     md.append(f'2. `FIGURES/Calibration_{ModelName}_{Suffix}.jpg` – Obs vs Sim of the best run '
               'and the metric against each parameter.')
     md.append(f'3. `PARAMETERS/{params_name}` – final parameter values.')
-    md.append(f'4. `OUTPUTS/{ModelName}_best/` – InVEST results with the final parameters over '
+    md.append(f'4. `PARAMETERS/{biotable_name}` – biophysical table with the calibrated '
+              'factors applied: use it as the biophysical table of future InVEST runs.')
+    md.append(f'5. `OUTPUTS/{ModelName}_best/` – InVEST results with the final parameters over '
               'all watersheds: **these are the calibrated results to use**.')
-    md.append(f'5. `EVALUATIONS/{eval_readme}` – how to read the per-iteration data.\n')
+    md.append(f'6. `EVALUATIONS/{eval_readme}` – how to read the per-iteration data.\n')
 
     md.append('## Folders\n')
     md.append(_md_table(['Folder', 'Files for this run', 'Content'], [
@@ -424,6 +430,9 @@ def Build_Workspace_Readme(ProjectPath, Suffix, ModelName, MethodShort, MetricSh
         ['`PARAMETERS/`', f'`{params_name}`',
          'Final parameter table. Its first columns (`Params, Model, Min, Max, Value`) follow '
          'the parameter input format, so it can be reused as the input of a new run.'],
+        ['`PARAMETERS/`', f'`{biotable_name}`',
+         'Biophysical table with the calibrated factors applied (only to the land covers '
+         'flagged in its `Status_Cal_*` columns). It is the table the final run used.'],
         ['`PARAMETERS/`', f'`{spotpy_db}`',
          'Spotpy\'s raw log of every iteration. Its objective column is the value handed to '
          f'the optimizer (−{MetricShort} for DDS, which maximizes); prefer `EVALUATIONS/`. '
@@ -432,13 +441,13 @@ def Build_Workspace_Readme(ProjectPath, Suffix, ModelName, MethodShort, MetricSh
          'Per-iteration parameters, metric and simulated values, plus the observations '
          'they are compared against.'],
         [f'`OUTPUTS/{ModelName}_best/`', 'InVEST outputs',
-         'Final run with the best parameters over all watersheds, and the biophysical table '
-         f'it used (`{ModelName}_BioTable_best.csv`).'],
+         'Final run with the best parameters over all watersheds.'],
         [f'`OUTPUTS/{iter_dir}/`', 'InVEST outputs',
          'Working folder of the calibration iterations, over the calibration watersheds only. '
          '**Overwritten on every iteration**: it holds the *last* iteration, not the best one.'],
-        ['`TMP/`', 'temporary files',
-         'Biophysical tables and zonal statistics of the last iteration. Safe to delete.'],
+        ['`TMP/`', f'`{_last_iter_biotable_name(ModelName)}`, zonal statistics',
+         'Biophysical table and zonal statistics of the **last** iteration (not the calibrated '
+         'one). Safe to delete.'],
     ]))
     md.append('')
 

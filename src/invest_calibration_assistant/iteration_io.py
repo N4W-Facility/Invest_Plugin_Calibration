@@ -9,6 +9,20 @@ against observations, and appending the result to the EVALUATIONS CSVs.
 import os
 
 
+def _calibrated_biotable_name(model_name, suffix):
+    """File name of the biophysical table with the calibrated factors applied.
+
+    Written under ``PARAMETERS/`` by every model's ``run_final`` and used as
+    the biophysical table of the final ``OUTPUTS/<model_name>_best`` run.
+    """
+    return f'{model_name}_BioTable_Calibrated_{suffix}.csv'
+
+
+def _last_iter_biotable_name(tag):
+    """File name, under ``TMP/``, of the biophysical table of the last iteration."""
+    return f'{tag}_BioTable_LastIter.csv'
+
+
 def _save_eval_csv(workspace, name, header, rows):
     """Append one calibration iteration's data to an EVALUATIONS CSV.
 
@@ -43,7 +57,9 @@ def _write_temp_biotable(si, mp, user_data, params, workspace, tag):
     Shared by every model's iteration runner: each calibration iteration
     proposes a new parameter set, which is applied to the project's
     biophysical table and written to
-    ``<workspace>/TMP/<tag>_biophysical.csv`` for the InVEST model run.
+    ``<workspace>/TMP/<tag>_BioTable_LastIter.csv`` for the InVEST model run.
+    It is overwritten on every iteration: it is *not* the calibrated table
+    (see :func:`_calibrated_biotable_name`).
 
     Parameters
     ----------
@@ -67,7 +83,7 @@ def _write_temp_biotable(si, mp, user_data, params, workspace, tag):
         Path to the written temporary biophysical table CSV.
     """
     table = si.Factor_BioTable(mp['biophysical_table_path'], params, user_data)
-    tmp_bio = os.path.join(workspace, 'TMP', f'{tag}_biophysical.csv')
+    tmp_bio = os.path.join(workspace, 'TMP', _last_iter_biotable_name(tag))
     table.to_csv(tmp_bio, index=False)
     return tmp_bio
 

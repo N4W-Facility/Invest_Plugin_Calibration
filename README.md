@@ -111,12 +111,14 @@ workspace_dir/
 ├── EVALUATIONS/    ← metric, observed, and simulated values per iteration (CSV),
 │                     plus a README_<MODEL>_<suffix>.md explaining columns, units and best iteration
 ├── PARAMETERS/     ← <MODEL>_BestParams_<suffix>.csv: final parameters (same format as the
-│                     parameter input, reusable for a refined run) + full Spotpy parameter log
+│                     parameter input, reusable for a refined run),
+│                     <MODEL>_BioTable_Calibrated_<suffix>.csv: biophysical table with the
+│                     calibrated factors applied, + full Spotpy parameter log
 ├── FIGURES/        ← calibration plots (dotty plots + Obs vs Sim scatter, JPG)
 ├── REPORT/         ← self-contained HTML calibration report
 ├── OUTPUTS/        ← InVEST results of the last calibration iteration (overwritten each one)
 │   └── AWY_best/   ← final run with the best-fit parameters
-└── TMP/            ← temporary modified biophysical tables
+└── TMP/            ← biophysical table of the last iteration (<MODEL>_BioTable_LastIter.csv)
 ```
 
 ---

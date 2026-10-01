@@ -9,7 +9,8 @@ Kept together so everything NDR-specific lives in one file.
 import logging
 import os
 
-from ..iteration_io import _save_iteration, _score_against_obs
+from ..iteration_io import (_calibrated_biotable_name, _last_iter_biotable_name, _save_iteration,
+                            _score_against_obs)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -95,7 +96,7 @@ def run_iteration(workspace, mp, user_data, vector, metric_name, factor_metric, 
         table['load_type_n'] = 'measured-runoff'
     if model_name == 'NDR_P' and 'load_type_p' not in table.columns:
         table['load_type_p'] = 'measured-runoff'
-    tmp_bio = os.path.join(workspace, 'TMP', f'{model_name}_biophysical.csv')
+    tmp_bio = os.path.join(workspace, 'TMP', _last_iter_biotable_name(model_name))
     table.to_csv(tmp_bio, index=False)
 
     out_dir = os.path.join(workspace, 'OUTPUTS',
@@ -152,7 +153,8 @@ def run_iteration(workspace, mp, user_data, vector, metric_name, factor_metric, 
 def run_final(workspace, mp, user_data, params_val, si, model_name):
     """Run NDR_N or NDR_P once with the best-fit parameters (final run).
 
-    Builds the final biophysical table from ``params_val``, then calls
+    Builds the calibrated biophysical table from ``params_val`` (saved as
+    ``PARAMETERS/<MODEL>_BioTable_Calibrated_<suffix>.csv``), then calls
     ``natcap.invest.ndr`` with the full (non-calibration) watershed set,
     writing results to ``OUTPUTS/<model_name>_best``.
 
@@ -189,7 +191,7 @@ def run_final(workspace, mp, user_data, params_val, si, model_name):
         table['load_type_n'] = 'measured-runoff'
     if model_name == 'NDR_P' and 'load_type_p' not in table.columns:
         table['load_type_p'] = 'measured-runoff'
-    tmp_bio = os.path.join(out_dir, f'{model_name}_BioTable_best.csv')
+    tmp_bio = os.path.join(workspace, 'PARAMETERS', _calibrated_biotable_name(model_name, suffix))
     table.to_csv(tmp_bio, index=False)
     tfa     = '%0.0f' % mp['threshold_flow_accumulation'] if mp['threshold_flow_accumulation'] is not None else ''
     sub_ws  = mp.get('sub_watersheds_path', '')
