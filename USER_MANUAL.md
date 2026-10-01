@@ -79,7 +79,7 @@ The plugin runs in its own environment, so its InVEST engine version can differ 
 
 The fastest way to learn the plugin is to run it on the dummy dataset:
 
-> **[Download the dummy dataset](https://tnc.box.com/s/m3gtuoj1hw5ijf95fxh7t0saii10ksln)**
+> **[Download the dummy dataset](https://tnc.box.com/s/k91p9xhh1ujz127jqvw95sb6yajotfg3)**
 
 ### 3.1 Dataset contents
 
