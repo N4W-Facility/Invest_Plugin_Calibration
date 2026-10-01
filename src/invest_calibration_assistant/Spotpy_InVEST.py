@@ -321,7 +321,8 @@ def _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, ModelName):
     """Build the calibration figure for one model and return its best-fit parameters.
 
     Reads the ``EVALUATIONS/<ModelName>_{Metric,Obs,Sim}_<Suffix>.csv``
-    files written during the calibration run, identifies the iteration
+    files written during the calibration run (layout documented in
+    ``iteration_io._save_iteration``), identifies the iteration
     with the best objective-function value, and renders one figure with:
     an Observed-vs-Simulated scatter panel (using the best-fit run) plus
     one dotty plot per calibrated parameter (parameter value vs. metric,
@@ -338,11 +339,9 @@ def _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, ModelName):
     NameMetric : str
         Short metric label used in axis/title text (e.g. ``'RMSE'``).
     FactorMetric : float
-        ``+1`` or ``-1``; the sign applied to the metric during
-        calibration (see ``_execute_*_direct`` in
-        ``calibration_assistant.py``). Used here to recover the true
-        (unsigned) metric value and to find its minimum regardless of
-        whether the optimizer maximized or minimized.
+        ``+1`` or ``-1``; the sign handed to spotpy during calibration.
+        Unused: the ``_Metric_`` CSV stores the unsigned metric. Kept so
+        the ``Plot_*`` wrappers keep their signature.
     ModelName : str
         One of ``'AWY'``, ``'SWY'``, ``'SDR'``, ``'NDR_N'``, ``'NDR_P'``;
         selects the plot configuration from ``_MODEL_PLOT_CONFIG``.
@@ -360,37 +359,28 @@ def _plot_calibration(ProjectPath, Suffix, NameMetric, FactorMetric, ModelName):
     param_keys, param_labels = zip(*cfg['params'])
     n_params    = len(param_keys)
 
-    # Metric and parameters
+    # Metric and parameters: iter, <params...>, <metric>
     FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'{ModelName}_Metric_{Suffix}.csv')
-    Tmp         = np.loadtxt(FileName, delimiter=',', skiprows=1)
-    Params      = Tmp[:, :n_params]
-    Metric      = Tmp[:, n_params]
+    MetricTab   = pd.read_csv(FileName)
+    Params      = MetricTab.iloc[:, 1:1 + n_params].to_numpy(dtype=float)
+    Metric      = MetricTab.iloc[:, 1 + n_params].to_numpy(dtype=float)
 
-    # Observed
-    FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'{ModelName}_Obs_{Suffix}.csv')
-    Obs         = np.loadtxt(FileName, delimiter=',', skiprows=1)
-    NGauges     = len(Obs) // len(Metric)
-    Obs         = Obs.reshape(len(Metric), NGauges)
-    Obs         = Obs.transpose()
-    Obs         = Obs[:, 0]
-    Obs         = Obs.reshape(NGauges, 1)
-
-    # Simulation
+    # Simulation: iter, ws_<id>, ... -> (NGauges, NIter), columns aligned
+    # with the Metric rows through 'iter'
     FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'{ModelName}_Sim_{Suffix}.csv')
-    Sim         = np.loadtxt(FileName, delimiter=',', skiprows=1)
-    Sim         = Sim.reshape(len(Metric), len(Sim) // len(Metric))
-    Sim         = Sim.transpose()
+    SimTab      = pd.read_csv(FileName).set_index('iter').loc[MetricTab['iter']]
+    Sim         = SimTab.to_numpy(dtype=float).transpose()
 
-    # Best parameters.
-    # Metric already has FactorMetric applied (FactorMetric*RMSE), so
-    # multiplying by FactorMetric again before comparing recovers the true
-    # RMSE, regardless of whether the algorithm internally maximizes (DDS)
-    # or minimizes (SCE-UA/LHS).
-    id_min          = np.argmin(FactorMetric * Metric)
+    # Observed: single row ws_<id>, ... -> (NGauges, 1), same order as Sim
+    FileName    = os.path.join(ProjectPath, 'EVALUATIONS', f'{ModelName}_Obs_{Suffix}.csv')
+    Obs         = pd.read_csv(FileName)[SimTab.columns].to_numpy(dtype=float).reshape(-1, 1)
+
+    # Best parameters. The CSV holds the unsigned metric (an error, lower is
+    # better), whatever sign the optimizer used internally.
+    id_min          = np.argmin(Metric)
     BestParams      = Params[id_min, :]
     BestParamsDict  = dict(zip(param_keys, BestParams))
-    BestAREM        = FactorMetric * Metric[id_min]
-    Metric          = FactorMetric * Metric
+    BestAREM        = Metric[id_min]
 
     # Grid sized to the exact number of panels needed (1 Obs-vs-Sim + 1 per
     # parameter), so no plot ever has empty/unused axes.

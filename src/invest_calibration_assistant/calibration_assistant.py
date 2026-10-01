@@ -52,6 +52,7 @@ import pandas as pd
 from natcap.invest import validation
 
 from . import Report_InVEST
+from .iteration_io import _clear_eval_csvs
 from .inputs import (
     _build_model_paths,
     _build_spotpy_params,
@@ -204,6 +205,9 @@ def execute(args):
     # ------------------------------------------------------------------
     for sub in ['EVALUATIONS', 'PARAMETERS', 'OUTPUTS', 'FIGURES', 'TMP']:
         si.CreateFolder(os.path.join(workspace, sub))
+    # The EVALUATIONS CSVs are appended to every iteration: start from
+    # empty files so a previous run with the same suffix is not mixed in.
+    _clear_eval_csvs(workspace, model_name, user_data['Suffix'])
 
     # ------------------------------------------------------------------
     # 4. Optimisation direction

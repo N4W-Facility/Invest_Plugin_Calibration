@@ -86,12 +86,12 @@ def run_iteration(workspace, mp, user_data, vector, metric_name, factor_metric, 
     suffix_part = f'_{suffix}' if suffix else ''
     sim_df  = pd.read_csv(os.path.join(out_dir, 'output',
                           f'watershed_results_wyield{suffix_part}.csv'))
-    obj, obs_val, sim_val = _score_against_obs(
+    obj, metric, ws_ids, obs_val, sim_val = _score_against_obs(
         si, sim_df, 'wyield_vol', obs_df, 'AWY', metric_name, factor_metric)
 
     _save_iteration(workspace, 'AWY', user_data['Suffix'],
                      f'Z,Factor-Kc,{metric_name}',
-                     f'{z:.2f},{kc:.2f},{obj:.2f}', obs_val, sim_val)
+                     f'{z:.2f},{kc:.2f},{metric:.6g}', ws_ids, obs_val, sim_val)
     return obj
 
 

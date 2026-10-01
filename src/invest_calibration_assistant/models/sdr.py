@@ -93,14 +93,14 @@ def run_iteration(workspace, mp, user_data, vector, metric_name, factor_metric, 
 
     dbf_path = os.path.join(out_dir, f'watershed_results_sdr_{suffix}.dbf')
     sim_df   = Dbf5(dbf_path).to_dataframe()
-    obj, obs_val, sim_val = _score_against_obs(
+    obj, metric, ws_ids, obs_val, sim_val = _score_against_obs(
         si, sim_df, 'sed_export', obs_df, 'SDR', metric_name, factor_metric)
 
     _save_iteration(
         workspace, 'SDR', user_data['Suffix'],
         f'sdr_max,k_param,ic_0_param,l_max,Factor-C,Factor-P,{metric_name}',
-        f'{sdr_max:.2f},{k_sdr:.2f},{ic0:.2f},{l_max:.2f},{fc:.5f},{fp:.5f},{obj:.2f}',
-        obs_val, sim_val)
+        f'{sdr_max:.2f},{k_sdr:.2f},{ic0:.2f},{l_max:.2f},{fc:.5f},{fp:.5f},{metric:.6g}',
+        ws_ids, obs_val, sim_val)
     return obj
 
 

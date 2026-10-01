@@ -131,17 +131,17 @@ def run_iteration(workspace, mp, user_data, vector, metric_name, factor_metric, 
     sim_df  = si.calculate_zonal_stats(mp['calibration_watersheds_path'],
                                        raster, os.path.join(workspace, 'TMP'),
                                        Suffix=model_name)
-    obj, obs_val, sim_val = _score_against_obs(
+    obj, metric, ws_ids, obs_val, sim_val = _score_against_obs(
         si, sim_df, sim_col, obs_df, obs_col, metric_name, factor_metric)
 
     if model_name == 'NDR_N':
         hdr   = f'SubCri_Len_N,Sub_Eff_N,Borselli-K,Factor_Load_N,Factor_Eff_N,{metric_name}'
-        p_row = f'{subcri_n:.2f},{sub_eff_n:.2f},{k_ndr:.2f},{load_n:.2f},{eff_n:.2f},{obj:.2f}'
+        p_row = f'{subcri_n:.2f},{sub_eff_n:.2f},{k_ndr:.2f},{load_n:.2f},{eff_n:.2f},{metric:.6g}'
     else:
         hdr   = f'SubCri_Len_P,Sub_Eff_P,Borselli-K,Factor_Load_P,Factor_Eff_P,{metric_name}'
-        p_row = f'{subcri_p:.2f},{sub_eff_p:.2f},{k_ndr:.2f},{load_p:.2f},{eff_p:.2f},{obj:.2f}'
+        p_row = f'{subcri_p:.2f},{sub_eff_p:.2f},{k_ndr:.2f},{load_p:.2f},{eff_p:.2f},{metric:.6g}'
 
-    _save_iteration(workspace, model_name, user_data['Suffix'], hdr, p_row, obs_val, sim_val)
+    _save_iteration(workspace, model_name, user_data['Suffix'], hdr, p_row, ws_ids, obs_val, sim_val)
     return obj
 
 

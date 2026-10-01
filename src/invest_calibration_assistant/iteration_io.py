@@ -102,26 +102,61 @@ def _score_against_obs(si, sim_df, sim_col, obs_df, obs_col, metric_name, factor
     Returns
     -------
     obj : float
-        ``factor_metric``-adjusted objective function value.
+        ``factor_metric``-adjusted objective function value, as returned
+        to spotpy (negative for DDS, which maximizes).
+    metric : float
+        Unsigned metric value (e.g. the actual RMSE), as written to the
+        ``_Metric_`` CSV.
+    ws_ids : numpy.ndarray
+        Watershed ids shared by ``obs_val`` and ``sim_val``, in the same
+        order.
     obs_val : numpy.ndarray
         Observed values, matched to ``sim_val`` by ``ws_id``.
     sim_val : numpy.ndarray
         Simulated values, matched to ``obs_val`` by ``ws_id``.
     """
     [I, idx] = si.ismember(sim_df['ws_id'].values, obs_df['ws_id'].values)
+    ws_ids  = sim_df['ws_id'].values[I]
     obs_val = obs_df[obs_col].values[idx]
     sim_val = sim_df[sim_col].values[I]
-    obj = factor_metric * si.Cal_FunObj(obs_val, sim_val, metric_name)
-    return obj, obs_val, sim_val
+    metric  = si.Cal_FunObj(obs_val, sim_val, metric_name)
+    obj     = factor_metric * metric
+    return obj, metric, ws_ids, obs_val, sim_val
 
 
-def _save_iteration(workspace, tag, suffix, header, row, obs_val, sim_val):
+def _eval_csv_names(tag, suffix):
+    """Return the EVALUATIONS CSV names for one model: (metric, obs, sim)."""
+    return (f'{tag}_Metric_{suffix}.csv',
+            f'{tag}_Obs_{suffix}.csv',
+            f'{tag}_Sim_{suffix}.csv')
+
+
+def _clear_eval_csvs(workspace, tag, suffix):
+    """Delete a model's EVALUATIONS CSVs so a new calibration starts clean.
+
+    ``_save_iteration`` appends to these files, so without this a second
+    calibration with the same workspace and suffix would be mixed with
+    the rows of the previous one.
+    """
+    for name in _eval_csv_names(tag, suffix):
+        path = os.path.join(workspace, 'EVALUATIONS', name)
+        if os.path.isfile(path):
+            os.remove(path)
+
+
+def _save_iteration(workspace, tag, suffix, header, row, ws_ids, obs_val, sim_val):
     """Append one calibration iteration to the model's EVALUATIONS CSVs.
 
-    Shared tail of every model's iteration runner: writes the
-    iteration's parameters/metric row plus the matched obs/sim arrays to
-    ``<tag>_Metric_<suffix>.csv``, ``<tag>_Obs_<suffix>.csv`` and
-    ``<tag>_Sim_<suffix>.csv``.
+    Shared tail of every model's iteration runner. The three files are
+    laid out so they can be read side by side without the code:
+
+    - ``<tag>_Metric_<suffix>.csv``: one row per iteration,
+      ``iter,<params...>,<metric>``.
+    - ``<tag>_Sim_<suffix>.csv``: one row per iteration,
+      ``iter,ws_<id>,ws_<id>,...`` (same ``iter`` as the Metric row).
+    - ``<tag>_Obs_<suffix>.csv``: a single row with the observed values,
+      ``ws_<id>,ws_<id>,...``, written on the first iteration only
+      (observations do not change between iterations).
 
     Parameters
     ----------
@@ -132,16 +167,45 @@ def _save_iteration(workspace, tag, suffix, header, row, obs_val, sim_val):
     suffix : str
         Project results suffix (``user_data['Suffix']``).
     header : str
-        Comma-separated header for the ``_Metric_`` CSV.
+        Comma-separated header for the ``_Metric_`` CSV (without ``iter``).
     row : str
-        Comma-separated data row for the ``_Metric_`` CSV.
+        Comma-separated data row for the ``_Metric_`` CSV (without ``iter``).
+        Its last value is the unsigned metric, not the signed objective
+        handed to spotpy.
+    ws_ids : numpy.ndarray
+        Watershed ids of ``obs_val`` / ``sim_val``, in the same order.
     obs_val : numpy.ndarray
         Observed values for this iteration.
     sim_val : numpy.ndarray
         Simulated values for this iteration.
+
+    Raises
+    ------
+    ValueError
+        If the matched watersheds differ from the ones already written
+        to the Sim CSV, which would misalign its columns.
     """
-    _save_eval_csv(workspace, f'{tag}_Metric_{suffix}.csv', header, [row])
-    _save_eval_csv(workspace, f'{tag}_Obs_{suffix}.csv', 'Obs',
-                   [f'{v:.2f}' for v in obs_val])
-    _save_eval_csv(workspace, f'{tag}_Sim_{suffix}.csv', 'Sim',
-                   [f'{v:.2f}' for v in sim_val])
+    metric_name, obs_name, sim_name = _eval_csv_names(tag, suffix)
+    ws_header = ','.join(f'ws_{w}' for w in ws_ids)
+
+    sim_path = os.path.join(workspace, 'EVALUATIONS', sim_name)
+    if os.path.isfile(sim_path):
+        with open(sim_path) as f:
+            written_header = f.readline().strip()
+        if written_header != f'iter,{ws_header}':
+            raise ValueError(
+                f'{tag}: watersheds matched in this iteration ({ws_header}) '
+                f'differ from those already in {sim_name} ({written_header}).')
+
+    metric_path = os.path.join(workspace, 'EVALUATIONS', metric_name)
+    it = 1
+    if os.path.isfile(metric_path):
+        with open(metric_path) as f:
+            it = sum(1 for _ in f)  # header + previous rows = next iter number
+
+    _save_eval_csv(workspace, metric_name, f'iter,{header}', [f'{it},{row}'])
+    if it == 1:
+        _save_eval_csv(workspace, obs_name, ws_header,
+                       [','.join(f'{v:.6g}' for v in obs_val)])
+    _save_eval_csv(workspace, sim_name, f'iter,{ws_header}',
+                   [f'{it},' + ','.join(f'{v:.6g}' for v in sim_val)])

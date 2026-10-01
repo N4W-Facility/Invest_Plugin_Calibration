@@ -95,13 +95,13 @@ def run_iteration(workspace, mp, user_data, vector, metric_name, factor_metric, 
     sim_df  = si.calculate_zonal_stats(mp['calibration_watersheds_path'],
                                        raster, os.path.join(workspace, 'TMP'),
                                        Suffix='SWY')
-    obj, obs_val, sim_val = _score_against_obs(
+    obj, metric, ws_ids, obs_val, sim_val = _score_against_obs(
         si, sim_df, 'mean', obs_df, 'SWY', metric_name, factor_metric)
 
     _save_iteration(workspace, 'SWY', user_data['Suffix'],
                      f'Alpha,Beta,Gamma,Factor-Kc_m,{metric_name}',
-                     f'{alpha:.3f},{beta:.3f},{gamma:.3f},{kc_m:.2f},{obj:.2f}',
-                     obs_val, sim_val)
+                     f'{alpha:.3f},{beta:.3f},{gamma:.3f},{kc_m:.2f},{metric:.6g}',
+                     ws_ids, obs_val, sim_val)
     return obj
 
 
