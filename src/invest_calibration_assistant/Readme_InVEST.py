@@ -14,6 +14,8 @@
 #   - PARAMETERS/<MODEL>_BioTable_Calibrated_<suffix>.csv (written by
 #     models/*.py run_final, documented here): biophysical table with the
 #     calibrated factors applied.
+#   - PARAMETERS/README_<MODEL>_<suffix>.md: columns and use of the three
+#     PARAMETERS files (final parameters, calibrated table, Spotpy log).
 #   - EVALUATIONS/README_<MODEL>_<suffix>.md: what every row/column of the
 #     Metric/Obs/Sim CSVs means, how they join, units and data sources.
 #   - README_<MODEL>_<suffix>.md (workspace root): folder map, what to open
@@ -55,6 +57,20 @@ _SPOTPY_DB_SUFFIX = {'DDS': 'DDS', 'SCE-UA': 'SCE', 'LHS': 'LHS'}
 # Internal parameter key -> row name in the parameter search-range CSV
 # (inverse of inputs._read_param_ranges' map; only IC0 is renamed).
 _PARAMS_CSV_NAME = {'IC0': 'Borselli-IC0'}
+
+# Biophysical-table columns scaled by each model's factors:
+# (column, factor, Status_Cal flag, decimals, upper cap). Mirrors
+# Spotpy_InVEST.Factor_BioTable: keep both in sync.
+_BIOTABLE_FACTORS = {
+    'AWY':   [('`Kc`', 'Factor-Kc', 'Status_Cal_Kc', 2, '1.2')],
+    'SWY':   [('`Kc_1` … `Kc_12`', 'Factor-Kc_m', 'Status_Cal_Kc', 2, '1.2')],
+    'SDR':   [('`usle_c`', 'Factor-C', 'Status_Cal_C', 5, '1'),
+              ('`usle_p`', 'Factor-P', 'Status_Cal_P', 2, '1')],
+    'NDR_N': [('`load_n`', 'Factor_Load_N', 'Status_Cal_Load_N', 3, 'none'),
+              ('`eff_n`', 'Factor_Eff_N', 'Status_Cal_Eff_N', 2, 'none')],
+    'NDR_P': [('`load_p`', 'Factor_Load_P', 'Status_Cal_Load_P', 3, 'none'),
+              ('`eff_p`', 'Factor_Eff_P', 'Status_Cal_Eff_P', 2, 'none')],
+}
 
 # A best value closer than this fraction of its search range to Min or
 # Max is flagged as pinned at a boundary.
@@ -336,6 +352,137 @@ def Build_Evaluations_Readme(ProjectPath, Suffix, ModelName, MethodShort, Metric
     return path
 
 
+def Build_Parameters_Readme(ProjectPath, Suffix, ModelName, MethodShort, MetricShort, EndTime):
+    """Write ``PARAMETERS/README_<ModelName>_<Suffix>.md`` for one calibration run.
+
+    Documents the three files of this model and suffix under PARAMETERS/:
+    the final parameter table (:func:`Save_Best_Params`), the calibrated
+    biophysical table (``models/*.py`` run_final) and Spotpy's database.
+
+    Parameters
+    ----------
+    ProjectPath : str
+        Calibration workspace directory.
+    Suffix : str
+        Project suffix used in the file names.
+    ModelName : str
+        One of ``'AWY'``, ``'SWY'``, ``'SDR'``, ``'NDR_N'``, ``'NDR_P'``.
+    MethodShort : str
+        Optimization algorithm short code (``'DDS'``, ``'LHS'``, ``'SCE-UA'``).
+    MetricShort : str
+        Objective metric short code (``'MSE'``, ``'MAE'``, ``'RMSE'``, ``'RRMSE'``).
+    EndTime : datetime.datetime
+        End of the calibration run.
+
+    Returns
+    -------
+    str
+        Path to the written README.
+    """
+    from .Spotpy_InVEST import _MODEL_PLOT_CONFIG
+
+    param_dir     = os.path.join(ProjectPath, 'PARAMETERS')
+    params_name   = _best_params_name(ModelName, Suffix)
+    biotable_name = _calibrated_biotable_name(ModelName, Suffix)
+    spotpy_db     = f'{ModelName}_{_SPOTPY_DB_SUFFIX.get(MethodShort, MethodShort)}.csv'
+    param_keys    = [k for k, _ in _MODEL_PLOT_CONFIG[ModelName]['params']]
+
+    # Final factor values, to show the multiplier actually applied.
+    final_val = {}
+    params_path = os.path.join(param_dir, params_name)
+    if os.path.isfile(params_path):
+        params = pd.read_csv(params_path, keep_default_na=False)
+        final_val = dict(zip(params['Params'], params['Value']))
+
+    md = []
+    md.append(f'# PARAMETERS – {_MODEL_FULL_NAME.get(ModelName, ModelName)}\n')
+    md.append(f'Final results of calibrating **{ModelName}** (suffix `{Suffix}`) with '
+              f'{MethodShort}, finished {EndTime.strftime("%Y-%m-%d %H:%M")}. This README was '
+              'generated automatically and only describes the files of this model and suffix.\n')
+
+    md.append('## Files\n')
+    md.append(_md_table(['File', 'Content', 'Use it to'], [
+        [f'`{params_name}`', 'Final value of every calibrated parameter',
+         'Report the calibration; start a refined calibration'],
+        [f'`{biotable_name}`', 'Biophysical table with the calibrated factors applied',
+         'Run InVEST with the calibrated land-cover coefficients'],
+        [f'`{spotpy_db}`', 'Spotpy\'s raw log of every iteration',
+         'Debugging only: prefer `EVALUATIONS/`'],
+    ]))
+    md.append('')
+
+    md.append(f'## `{params_name}`\n')
+    md.append('One row per calibrated parameter.\n')
+    md.append(_md_table(['Column', 'Meaning'], [
+        ['`Params`', 'Parameter name, as in the parameter input file.'],
+        ['`Model`', 'Model the parameter belongs to.'],
+        ['`Min`, `Max`', 'Search range used in this calibration.'],
+        ['`Value`', '**Final value**: the one used in the final run `OUTPUTS/'
+                    f'{ModelName}_best/`.'],
+        ['`Initial`', 'Initial guess given in the parameter input file.'],
+        ['`Unit`', 'Unit of the parameter (empty when dimensionless).'],
+        ['`Description`', 'What the parameter controls.'],
+        ['`Near_Bound`', '`Min` or `Max` when `Value` lies within '
+                         f'{_NEAR_BOUND_FRACTION:.0%} of that end of the search range: the '
+                         'optimum may lie outside it. Empty otherwise.'],
+        ['`Source`', '`calibrated`, or `initial guess (no best fit found)` when the calibration '
+                     'produced no valid best fit and the initial guess was used instead.'],
+    ]))
+    md.append('')
+    md.append('**Refined calibration:** its first five columns (`Params, Model, Min, Max, Value`) '
+              'follow the parameter input format and the rest are ignored on input, so this file '
+              'can be given directly as the parameter input of a new run. Widen `Min`/`Max` of '
+              'the parameters flagged in `Near_Bound`, or narrow the range around `Value`, '
+              'first.\n')
+    md.append('Parameters whose name does not start with `Factor` are InVEST model arguments: '
+              'they are **not** stored in the biophysical table. To reproduce the calibrated '
+              'run in InVEST, enter their `Value` in the corresponding model input.\n')
+
+    md.append(f'## `{biotable_name}`\n')
+    md.append('Copy of the input biophysical table where the columns below were multiplied by '
+              'their calibrated factor, **only in the rows (land covers) whose `Status_Cal_*` '
+              'flag is 1**. Every other row and column is unchanged. It is the biophysical '
+              'table the final run used.\n')
+    md.append(_md_table(['Column', 'Factor', 'Final factor', 'Rows changed when',
+                         'Rounding', 'Upper cap'], [
+        [col, f'`{factor}`', _fmt(final_val[factor]) if factor in final_val else '–',
+         f'`{flag}` = 1', f'{dec} decimals', cap]
+        for col, factor, flag, dec, cap in _BIOTABLE_FACTORS[ModelName]
+    ]))
+    md.append('')
+    if ModelName in ('NDR_N', 'NDR_P'):
+        nutrient = ModelName[-1].lower()
+        md.append(f'If the input table had no `load_type_{nutrient}` column, it was added with '
+                  'the value `measured-runoff` (required by InVEST ≥ 3.18).\n')
+    md.append('**Using it:** give it as the biophysical table of any InVEST run of this model; '
+              'InVEST ignores the extra `Status_Cal_*` columns. Do **not** use it as the input '
+              'biophysical table of a new calibration: the new factors would be applied on top '
+              'of the already calibrated values. Start new calibrations from the original '
+              'table.\n')
+
+    md.append(f'## `{spotpy_db}`\n')
+    md.append('Written by Spotpy itself, one row per iteration.\n')
+    md.append(_md_table(['Column', 'Meaning'], [
+        ['`like1`', f'Objective handed to the optimizer: −{MetricShort} for DDS (a maximizer), '
+                    f'{MetricShort} for SCE-UA and LHS.'],
+        [', '.join(f'`par{k}`' for k in param_keys), 'Parameter values of the iteration.'],
+        ['`simulation_0`, `simulation_1`, …', 'A **copy of the parameter values**, not '
+         'simulated values: the plugin runs InVEST inside the objective function, so Spotpy '
+         'only sees the parameters. Simulated values are in `EVALUATIONS/`.'],
+        ['`chain`', 'Spotpy internal bookkeeping.'],
+    ]))
+    md.append('')
+    md.append('Its name has **no suffix**: any new calibration of this model with the same '
+              'method overwrites it, even with a different suffix. `EVALUATIONS/` holds the '
+              'same iterations with the metric as its true value (≥ 0, lower is better) and '
+              'is the recommended source.')
+
+    path = os.path.join(param_dir, f'README_{ModelName}_{Suffix}.md')
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(md) + '\n')
+    return path
+
+
 def Build_Workspace_Readme(ProjectPath, Suffix, ModelName, MethodShort, MetricShort,
                            NSim, BestMetricValue, UsedFallback, EndTime):
     """Write ``README_<ModelName>_<Suffix>.md`` at the workspace root.
@@ -379,6 +526,7 @@ def Build_Workspace_Readme(ProjectPath, Suffix, ModelName, MethodShort, MetricSh
     biotable_name = _calibrated_biotable_name(ModelName, Suffix)
     spotpy_db   = f'{ModelName}_{_SPOTPY_DB_SUFFIX.get(MethodShort, MethodShort)}.csv'
     eval_readme = f'README_{ModelName}_{Suffix}.md'
+    param_readme = eval_readme
 
     md = []
     md.append(f'# Calibration workspace – {_MODEL_FULL_NAME.get(ModelName, ModelName)}\n')
@@ -421,12 +569,16 @@ def Build_Workspace_Readme(ProjectPath, Suffix, ModelName, MethodShort, MetricSh
               'factors applied: use it as the biophysical table of future InVEST runs.')
     md.append(f'5. `OUTPUTS/{ModelName}_best/` – InVEST results with the final parameters over '
               'all watersheds: **these are the calibrated results to use**.')
-    md.append(f'6. `EVALUATIONS/{eval_readme}` – how to read the per-iteration data.\n')
+    md.append(f'6. `PARAMETERS/{param_readme}` – columns of the PARAMETERS files and how to reuse '
+              'them.')
+    md.append(f'7. `EVALUATIONS/{eval_readme}` – how to read the per-iteration data.\n')
 
     md.append('## Folders\n')
     md.append(_md_table(['Folder', 'Files for this run', 'Content'], [
         ['`REPORT/`', f'`Report_{ModelName}_{Suffix}.html`', 'Self-contained HTML report.'],
         ['`FIGURES/`', f'`Calibration_{ModelName}_{Suffix}.jpg`', 'Calibration figure.'],
+        ['`PARAMETERS/`', f'`{param_readme}`',
+         'What every column of the files below means and how to reuse them.'],
         ['`PARAMETERS/`', f'`{params_name}`',
          'Final parameter table. Its first columns (`Params, Model, Min, Max, Value`) follow '
          'the parameter input format, so it can be reused as the input of a new run.'],

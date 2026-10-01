@@ -394,7 +394,7 @@ def execute(args):
         LOGGER.exception('Could not build the HTML calibration report.')
 
     # ------------------------------------------------------------------
-    # 11. READMEs: EVALUATIONS CSVs and workspace overview
+    # 11. READMEs: EVALUATIONS CSVs, PARAMETERS files and workspace overview
     # ------------------------------------------------------------------
     try:
         readme_path = Readme_InVEST.Build_Evaluations_Readme(
@@ -410,6 +410,18 @@ def execute(args):
         LOGGER.info(f'EVALUATIONS README written to: {readme_path}')
     except Exception:
         LOGGER.exception('Could not build the EVALUATIONS README.')
+    try:
+        readme_path = Readme_InVEST.Build_Parameters_Readme(
+            ProjectPath=workspace,
+            Suffix=project_name,
+            ModelName=model_name,
+            MethodShort=_METHOD_SHORT.get(method, method),
+            MetricShort=fo_label,
+            EndTime=end_time,
+        )
+        LOGGER.info(f'PARAMETERS README written to: {readme_path}')
+    except Exception:
+        LOGGER.exception('Could not build the PARAMETERS README.')
     try:
         readme_path = Readme_InVEST.Build_Workspace_Readme(
             ProjectPath=workspace,
