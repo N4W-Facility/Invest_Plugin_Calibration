@@ -51,7 +51,7 @@ import pandas as pd
 
 from natcap.invest import validation
 
-from . import Report_InVEST
+from . import Readme_InVEST, Report_InVEST
 from .iteration_io import _clear_eval_csvs
 from .inputs import (
     _build_model_paths,
@@ -377,6 +377,24 @@ def execute(args):
             LOGGER.exception('Could not open the calibration report automatically.')
     except Exception:
         LOGGER.exception('Could not build the HTML calibration report.')
+
+    # ------------------------------------------------------------------
+    # 11. README describing the EVALUATIONS CSVs
+    # ------------------------------------------------------------------
+    try:
+        readme_path = Readme_InVEST.Build_Evaluations_Readme(
+            ProjectPath=workspace,
+            Suffix=project_name,
+            ModelName=model_name,
+            MethodShort=_METHOD_SHORT.get(method, method),
+            MetricShort=fo_label,
+            NSim=n_sim,
+            ObservedPath=args['observed_data_path'],
+            EndTime=end_time,
+        )
+        LOGGER.info(f'EVALUATIONS README written to: {readme_path}')
+    except Exception:
+        LOGGER.exception('Could not build the EVALUATIONS README.')
 
     LOGGER.info('=' * 60)
     LOGGER.info(f'Calibration complete: {model_name}')

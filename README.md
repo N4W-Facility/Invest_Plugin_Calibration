@@ -107,7 +107,8 @@ A complete set of sample input files (rasters, shapefiles, biophysical table, Pa
 
 ```
 workspace_dir/
-├── EVALUATIONS/    ← metric, observed, and simulated values per iteration (CSV)
+├── EVALUATIONS/    ← metric, observed, and simulated values per iteration (CSV),
+│                     plus a README_<MODEL>_<suffix>.md explaining columns, units and best iteration
 ├── PARAMETERS/     ← full Spotpy parameter log (CSV)
 ├── FIGURES/        ← calibration plots (dotty plots + Obs vs Sim scatter, JPG)
 ├── OUTPUTS/        ← InVEST results for each calibration iteration
