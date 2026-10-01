@@ -66,6 +66,21 @@ _PARAM_PLAIN_LABELS = {
     'Factor_Eff_P':   'Factor_Eff_P — scales the eff_p column',
 }
 
+
+def _param_description_unit(key):
+    """Split a parameter's plain label into (description, unit).
+
+    Labels in ``_PARAM_PLAIN_LABELS`` read ``'<name> — <description>'``
+    with a trailing ``' (m)'`` for the only parameters that have a unit;
+    every other parameter is dimensionless.
+    """
+    label = _PARAM_PLAIN_LABELS.get(key, key)
+    description = label.split(' — ', 1)[-1]
+    if description.endswith(' (m)'):
+        return description[:-len(' (m)')], 'm'
+    return description, 'dimensionless'
+
+
 # Which Status_Cal_* column gates which biophysical-table column, for the
 # "which land covers were calibrated" section. Mirrors Factor_BioTable() in
 # Spotpy_InVEST.py and the _STATUS_CAL_COLUMNS map in calibration_assistant.py.

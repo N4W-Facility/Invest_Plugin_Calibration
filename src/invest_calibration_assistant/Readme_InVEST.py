@@ -7,10 +7,14 @@
 # Author        : Jonathan Nogales Pimentel / Carlos Andrés Rogéliz Prada / Miguel Angel Cañón
 # Email         : jonathan.nogales@tnc.org
 #
-# Markdown README for the EVALUATIONS folder. Written at the end of each
-# calibration run so a user opening the Metric/Obs/Sim CSVs knows what
-# every row and column means, which observation each simulated value is
-# compared against, and in which units — without reading the code.
+# Files that document a finished calibration run for its user, without
+# reading the code:
+#   - PARAMETERS/<MODEL>_BestParams_<suffix>.csv: final parameter table,
+#     reusable as the parameter search-range input of a refined run.
+#   - EVALUATIONS/README_<MODEL>_<suffix>.md: what every row/column of the
+#     Metric/Obs/Sim CSVs means, how they join, units and data sources.
+#   - README_<MODEL>_<suffix>.md (workspace root): folder map, what to open
+#     first, and the key results of the run.
 # -------------------------------------------------------------------------
 
 import os
@@ -18,7 +22,7 @@ import os
 import pandas as pd
 
 from .iteration_io import _eval_csv_names
-from .Report_InVEST import _MODEL_FULL_NAME, _MODEL_UNIT_PLAIN, _PARAM_PLAIN_LABELS
+from .Report_InVEST import _MODEL_FULL_NAME, _MODEL_UNIT_PLAIN, _param_description_unit
 
 # Where each model's simulated value comes from, and which column of the
 # observed-data table it is compared against. Mirrors models/*.py
@@ -35,6 +39,23 @@ _SIM_SOURCE = {
     'NDR_P': ('sum of `OUTPUTS/04-NDR_P/p_surface_export_<suffix>.tif` over each calibration '
               'watershed (surface phosphorus export)'),
 }
+
+# Per-iteration output folder of each model under OUTPUTS/ (models/*.py).
+_ITER_OUTPUT_DIR = {
+    'AWY': '01-AWY', 'SWY': '02-SWY', 'SDR': '03-SDR',
+    'NDR_N': '04-NDR_N', 'NDR_P': '04-NDR_P',
+}
+
+# Spotpy database name suffix per method (calibration_assistant.execute).
+_SPOTPY_DB_SUFFIX = {'DDS': 'DDS', 'SCE-UA': 'SCE', 'LHS': 'LHS'}
+
+# Internal parameter key -> row name in the parameter search-range CSV
+# (inverse of inputs._read_param_ranges' map; only IC0 is renamed).
+_PARAMS_CSV_NAME = {'IC0': 'Borselli-IC0'}
+
+# A best value closer than this fraction of its search range to Min or
+# Max is flagged as pinned at a boundary.
+_NEAR_BOUND_FRACTION = 0.02
 
 # Metric short code -> (definition, how its unit relates to the variable's).
 _METRIC_INFO = {
@@ -66,6 +87,68 @@ def _md_table(header, rows):
 def _fmt(value):
     """Compact number formatting for the README tables."""
     return f'{value:.6g}'
+
+
+def _best_params_name(model_name, suffix):
+    """File name of the final parameter table under PARAMETERS/."""
+    return f'{model_name}_BestParams_{suffix}.csv'
+
+
+def Save_Best_Params(ProjectPath, Suffix, ModelName, ParamsMin, ParamsMax, ParamsVal,
+                     FinalParams, UsedFallback):
+    """Write ``PARAMETERS/<ModelName>_BestParams_<Suffix>.csv``.
+
+    One row per calibrated parameter. The first five columns follow the
+    parameter search-range input format (``Params, Model, Min, Max,
+    Value``, with ``Value`` = final value), so the file can be fed back
+    as the input of a refined calibration after adjusting ``Min``/``Max``;
+    the remaining columns are informational and ignored on input.
+
+    Parameters
+    ----------
+    ProjectPath : str
+        Calibration workspace directory.
+    Suffix : str
+        Project suffix used in the file name.
+    ModelName : str
+        One of ``'AWY'``, ``'SWY'``, ``'SDR'``, ``'NDR_N'``, ``'NDR_P'``.
+    ParamsMin, ParamsMax, ParamsVal : dict
+        Search bounds and initial guess, keyed by internal parameter name.
+    FinalParams : dict
+        Parameter values used for the final InVEST run.
+    UsedFallback : bool
+        True when no best-fit set was found and the initial guess was used.
+
+    Returns
+    -------
+    str
+        Path to the written CSV.
+    """
+    from .Spotpy_InVEST import _MODEL_PLOT_CONFIG
+
+    rows = []
+    for key, _ in _MODEL_PLOT_CONFIG[ModelName]['params']:
+        lo, hi = ParamsMin[key], ParamsMax[key]
+        value = FinalParams.get(key, ParamsVal[key])
+        margin = _NEAR_BOUND_FRACTION * (hi - lo)
+        near = 'Min' if value <= lo + margin else 'Max' if value >= hi - margin else ''
+        description, unit = _param_description_unit(key)
+        rows.append({
+            'Params':      _PARAMS_CSV_NAME.get(key, key),
+            'Model':       ModelName,
+            'Min':         lo,
+            'Max':         hi,
+            'Value':       value,
+            'Initial':     ParamsVal[key],
+            'Unit':        unit,
+            'Description': description,
+            'Near_Bound':  near,
+            'Source':      'initial guess (no best fit found)' if UsedFallback else 'calibrated',
+        })
+
+    path = os.path.join(ProjectPath, 'PARAMETERS', _best_params_name(ModelName, Suffix))
+    pd.DataFrame(rows).to_csv(path, index=False, float_format='%.6g')
+    return path
 
 
 def Build_Evaluations_Readme(ProjectPath, Suffix, ModelName, MethodShort, MetricShort,
@@ -176,9 +259,8 @@ def Build_Evaluations_Readme(ProjectPath, Suffix, ModelName, MethodShort, Metric
     md.append('## Columns of the Metric file\n')
     rows = [['`iter`', 'Iteration number (1, 2, …)', '—']]
     for key, col in zip(param_keys, param_cols):
-        label = _PARAM_PLAIN_LABELS.get(key, key)
-        rows.append([f'`{col}`', label.replace(' (m)', ''),
-                     'm' if label.endswith('(m)') else 'dimensionless'])
+        description, param_unit = _param_description_unit(key)
+        rows.append([f'`{col}`', description, param_unit])
     rows.append([f'`{metric_col}`', metric_def, metric_unit])
     md.append(_md_table(['Column', 'Meaning', 'Unit'], rows))
     md.append('\nParameters prefixed with `Factor` are multipliers applied to a column of the '
@@ -246,6 +328,128 @@ def Build_Evaluations_Readme(ProjectPath, Suffix, ModelName, MethodShort, Metric
               'against each parameter.')
 
     path = os.path.join(eval_dir, f'README_{ModelName}_{Suffix}.md')
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(md) + '\n')
+    return path
+
+
+def Build_Workspace_Readme(ProjectPath, Suffix, ModelName, MethodShort, MetricShort,
+                           NSim, BestMetricValue, UsedFallback, EndTime):
+    """Write ``README_<ModelName>_<Suffix>.md`` at the workspace root.
+
+    Entry point for a user opening the workspace: key results, what to
+    open first, and what every folder holds for this model and suffix.
+    Reads the final parameter table written by :func:`Save_Best_Params`
+    when it exists.
+
+    Parameters
+    ----------
+    ProjectPath : str
+        Calibration workspace directory.
+    Suffix : str
+        Project suffix used in the output file names.
+    ModelName : str
+        One of ``'AWY'``, ``'SWY'``, ``'SDR'``, ``'NDR_N'``, ``'NDR_P'``.
+    MethodShort : str
+        Optimization algorithm short code (``'DDS'``, ``'LHS'``, ``'SCE-UA'``).
+    MetricShort : str
+        Objective metric short code (``'MSE'``, ``'MAE'``, ``'RMSE'``, ``'RRMSE'``).
+    NSim : int
+        Number of simulations requested.
+    BestMetricValue : float or None
+        Best (unsigned) metric value, or ``None`` if it could not be found.
+    UsedFallback : bool
+        True when no best-fit set was found and the initial guess was used.
+    EndTime : datetime.datetime
+        End of the calibration run.
+
+    Returns
+    -------
+    str
+        Path to the written README.
+    """
+    metric_unit = _metric_unit(ModelName, MetricShort)
+    iter_dir    = _ITER_OUTPUT_DIR.get(ModelName, ModelName)
+    metric_name, obs_name, sim_name = _eval_csv_names(ModelName, Suffix)
+    params_name = _best_params_name(ModelName, Suffix)
+    params_path = os.path.join(ProjectPath, 'PARAMETERS', params_name)
+    spotpy_db   = f'{ModelName}_{_SPOTPY_DB_SUFFIX.get(MethodShort, MethodShort)}.csv'
+    eval_readme = f'README_{ModelName}_{Suffix}.md'
+
+    md = []
+    md.append(f'# Calibration workspace – {_MODEL_FULL_NAME.get(ModelName, ModelName)}\n')
+    md.append(f'Results of calibrating **{ModelName}** (suffix `{Suffix}`) with {MethodShort}, '
+              f'{NSim} simulations, finished {EndTime.strftime("%Y-%m-%d %H:%M")}. '
+              f'This README was generated automatically and only describes the files of this '
+              f'model and suffix: other models calibrated in the same workspace have their own.\n')
+
+    md.append('## Key results\n')
+    if UsedFallback:
+        md.append('> **Warning:** no valid best-fit parameter set was found. The final run used '
+                  'the **initial guess** from the parameter input file. Check the logs and '
+                  '`EVALUATIONS/` before using these results.\n')
+    if BestMetricValue is not None:
+        md.append(f'- Best {MetricShort}: **{_fmt(BestMetricValue)}** {metric_unit} '
+                  f'(lower is better).')
+    near_rows = []
+    if os.path.isfile(params_path):
+        params = pd.read_csv(params_path, keep_default_na=False)
+        md.append(f'- Final parameters (`PARAMETERS/{params_name}`):\n')
+        md.append(_md_table(['Parameter', 'Final value', 'Search range', 'Unit'], [
+            [f'`{r.Params}`', _fmt(r.Value), f'{_fmt(r.Min)} – {_fmt(r.Max)}', r.Unit]
+            for r in params.itertuples()]))
+        near_rows = [r for r in params.itertuples() if r.Near_Bound]
+    md.append('')
+    if near_rows:
+        md.append('> **Parameters at a range boundary:** '
+                  + ', '.join(f'`{r.Params}` ({r.Near_Bound})' for r in near_rows)
+                  + '. The optimum may lie outside the search range: consider widening it in '
+                  f'`PARAMETERS/{params_name}` and running a new calibration with that file as '
+                  'the parameter input.\n')
+
+    md.append('## Where to start\n')
+    md.append(f'1. `REPORT/Report_{ModelName}_{Suffix}.html` – full calibration report '
+              '(open in a browser).')
+    md.append(f'2. `FIGURES/Calibration_{ModelName}_{Suffix}.jpg` – Obs vs Sim of the best run '
+              'and the metric against each parameter.')
+    md.append(f'3. `PARAMETERS/{params_name}` – final parameter values.')
+    md.append(f'4. `OUTPUTS/{ModelName}_best/` – InVEST results with the final parameters over '
+              'all watersheds: **these are the calibrated results to use**.')
+    md.append(f'5. `EVALUATIONS/{eval_readme}` – how to read the per-iteration data.\n')
+
+    md.append('## Folders\n')
+    md.append(_md_table(['Folder', 'Files for this run', 'Content'], [
+        ['`REPORT/`', f'`Report_{ModelName}_{Suffix}.html`', 'Self-contained HTML report.'],
+        ['`FIGURES/`', f'`Calibration_{ModelName}_{Suffix}.jpg`', 'Calibration figure.'],
+        ['`PARAMETERS/`', f'`{params_name}`',
+         'Final parameter table. Its first columns (`Params, Model, Min, Max, Value`) follow '
+         'the parameter input format, so it can be reused as the input of a new run.'],
+        ['`PARAMETERS/`', f'`{spotpy_db}`',
+         'Spotpy\'s raw log of every iteration. Its objective column is the value handed to '
+         f'the optimizer (−{MetricShort} for DDS, which maximizes); prefer `EVALUATIONS/`. '
+         'Its name has no suffix, so any new run of this model and method overwrites it.'],
+        ['`EVALUATIONS/`', f'`{metric_name}`, `{sim_name}`, `{obs_name}`, `{eval_readme}`',
+         'Per-iteration parameters, metric and simulated values, plus the observations '
+         'they are compared against.'],
+        [f'`OUTPUTS/{ModelName}_best/`', 'InVEST outputs',
+         'Final run with the best parameters over all watersheds, and the biophysical table '
+         f'it used (`{ModelName}_BioTable_best.csv`).'],
+        [f'`OUTPUTS/{iter_dir}/`', 'InVEST outputs',
+         'Working folder of the calibration iterations, over the calibration watersheds only. '
+         '**Overwritten on every iteration**: it holds the *last* iteration, not the best one.'],
+        ['`TMP/`', 'temporary files',
+         'Biophysical tables and zonal statistics of the last iteration. Safe to delete.'],
+    ]))
+    md.append('')
+
+    md.append('## Running again\n')
+    md.append('A new calibration of this model **overwrites** the files listed above: all of '
+              'them when it uses the same suffix (the `EVALUATIONS/` CSVs are cleared when it '
+              'starts), and the ones without the suffix in their name (the Spotpy log, '
+              '`OUTPUTS/` folders and `TMP/`) even with a different suffix. Copy this workspace '
+              'to keep this run intact.')
+
+    path = os.path.join(ProjectPath, f'README_{ModelName}_{Suffix}.md')
     with open(path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(md) + '\n')
     return path

@@ -107,11 +107,14 @@ A complete set of sample input files (rasters, shapefiles, biophysical table, Pa
 
 ```
 workspace_dir/
+├── README_<MODEL>_<suffix>.md ← start here: key results, what to open first, folder map
 ├── EVALUATIONS/    ← metric, observed, and simulated values per iteration (CSV),
 │                     plus a README_<MODEL>_<suffix>.md explaining columns, units and best iteration
-├── PARAMETERS/     ← full Spotpy parameter log (CSV)
+├── PARAMETERS/     ← <MODEL>_BestParams_<suffix>.csv: final parameters (same format as the
+│                     parameter input, reusable for a refined run) + full Spotpy parameter log
 ├── FIGURES/        ← calibration plots (dotty plots + Obs vs Sim scatter, JPG)
-├── OUTPUTS/        ← InVEST results for each calibration iteration
+├── REPORT/         ← self-contained HTML calibration report
+├── OUTPUTS/        ← InVEST results of the last calibration iteration (overwritten each one)
 │   └── AWY_best/   ← final run with the best-fit parameters
 └── TMP/            ← temporary modified biophysical tables
 ```

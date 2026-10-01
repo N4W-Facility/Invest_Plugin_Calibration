@@ -343,6 +343,21 @@ def execute(args):
             'using the initial parameter guess for the final run instead.')
         final_params_val = params_val
 
+    try:
+        params_path = Readme_InVEST.Save_Best_Params(
+            ProjectPath=workspace,
+            Suffix=project_name,
+            ModelName=model_name,
+            ParamsMin=params_min,
+            ParamsMax=params_max,
+            ParamsVal=params_val,
+            FinalParams=final_params_val,
+            UsedFallback=used_fallback,
+        )
+        LOGGER.info(f'Final parameter table written to: {params_path}')
+    except Exception:
+        LOGGER.exception('Could not write the final parameter table.')
+
     LOGGER.info('Running InVEST with best-fit parameters …')
     _run_best_params(workspace, model_name, mp, user_data, final_params_val, si)
 
@@ -379,7 +394,7 @@ def execute(args):
         LOGGER.exception('Could not build the HTML calibration report.')
 
     # ------------------------------------------------------------------
-    # 11. README describing the EVALUATIONS CSVs
+    # 11. READMEs: EVALUATIONS CSVs and workspace overview
     # ------------------------------------------------------------------
     try:
         readme_path = Readme_InVEST.Build_Evaluations_Readme(
@@ -395,6 +410,21 @@ def execute(args):
         LOGGER.info(f'EVALUATIONS README written to: {readme_path}')
     except Exception:
         LOGGER.exception('Could not build the EVALUATIONS README.')
+    try:
+        readme_path = Readme_InVEST.Build_Workspace_Readme(
+            ProjectPath=workspace,
+            Suffix=project_name,
+            ModelName=model_name,
+            MethodShort=_METHOD_SHORT.get(method, method),
+            MetricShort=fo_label,
+            NSim=n_sim,
+            BestMetricValue=best_metric_value,
+            UsedFallback=used_fallback,
+            EndTime=end_time,
+        )
+        LOGGER.info(f'Workspace README written to: {readme_path}')
+    except Exception:
+        LOGGER.exception('Could not build the workspace README.')
 
     LOGGER.info('=' * 60)
     LOGGER.info(f'Calibration complete: {model_name}')
